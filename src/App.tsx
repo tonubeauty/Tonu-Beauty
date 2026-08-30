@@ -5,7 +5,7 @@ import { getProductsFromFirestore } from './lib/firebase';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { ProductCatalog } from './components/ProductCatalog';
-import { ProductDetailModal } from './components/ProductDetailModal';
+import { ProductDetailPage } from './components/ProductDetailPage';
 import { CartDrawer } from './components/CartDrawer';
 import { OrderFormModal } from './components/OrderFormModal';
 import { OrderSuccessModal } from './components/OrderSuccessModal';
@@ -351,57 +351,77 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1">
-        {/* Hero Section */}
-        <HeroSection
-          onExploreClick={scrollToCatalog}
-          onOpenAppointmentModal={() => {
-            setAppointmentService('');
-            pushModalHistory('appointment');
-            setIsAppointmentModalOpen(true);
-          }}
-        />
+        {quickViewProduct ? (
+          /* Full Page Product Detail View */
+          <ProductDetailPage
+            product={quickViewProduct}
+            onBack={() => setQuickViewProduct(null)}
+            onAddToCart={handleAddToCart}
+            onDirectOrder={handleDirectOrder}
+            onOpenAppointment={(serviceName) => {
+              setAppointmentService(serviceName || '');
+              pushModalHistory('appointment');
+              setIsAppointmentModalOpen(true);
+            }}
+            onToast={showToast}
+          />
+        ) : (
+          /* Normal Homepage & Catalog View */
+          <>
+            {/* Hero Section */}
+            <HeroSection
+              onExploreClick={scrollToCatalog}
+              onOpenAppointmentModal={() => {
+                setAppointmentService('');
+                pushModalHistory('appointment');
+                setIsAppointmentModalOpen(true);
+              }}
+            />
 
-        {/* Tanu Beauty Parlour & Laser Center Featured Section */}
-        <TanuBeautySection
-          onBookAppointment={(serviceName) => {
-            setAppointmentService(serviceName || '');
-            pushModalHistory('appointment');
-            setIsAppointmentModalOpen(true);
-          }}
-          onExploreBeautyProducts={() => {
-            pushModalHistory('category');
-            setSelectedCategory('csa_laser');
-            scrollToCatalog();
-          }}
-        />
+            {/* Tanu Beauty Parlour & Laser Center Featured Section */}
+            <TanuBeautySection
+              onBookAppointment={(serviceName) => {
+                setAppointmentService(serviceName || '');
+                pushModalHistory('appointment');
+                setIsAppointmentModalOpen(true);
+              }}
+              onExploreBeautyProducts={() => {
+                pushModalHistory('category');
+                setSelectedCategory('csa_laser');
+                scrollToCatalog();
+              }}
+            />
 
-        {/* Product Catalog Grid */}
-        <ProductCatalog
-          products={products}
-          categories={CATEGORIES}
-          selectedCategory={selectedCategory}
-          onSelectCategory={(catId) => {
-            pushModalHistory('category');
-            setSelectedCategory(catId);
-          }}
-          searchQuery={searchQuery}
-          onQuickView={(p) => {
-            pushModalHistory('quickView');
-            setQuickViewProduct(p);
-          }}
-          onAddToCart={handleAddToCart}
-          onDirectOrder={handleDirectOrder}
-          onToast={showToast}
-        />
+            {/* Product Catalog Grid */}
+            <ProductCatalog
+              products={products}
+              categories={CATEGORIES}
+              selectedCategory={selectedCategory}
+              onSelectCategory={(catId) => {
+                pushModalHistory('category');
+                setSelectedCategory(catId);
+              }}
+              searchQuery={searchQuery}
+              onQuickView={(p) => {
+                pushModalHistory('quickView');
+                setQuickViewProduct(p);
+              }}
+              onAddToCart={handleAddToCart}
+              onDirectOrder={handleDirectOrder}
+              onToast={showToast}
+            />
 
-        {/* Security and Data Protection Section */}
-        <SecurityNotice />
+            {/* Security and Data Protection Section */}
+            <SecurityNotice />
+          </>
+        )}
       </main>
 
       {/* Footer */}
       <Footer
         onOpenTrackModal={() => handleOpenTrackModalWithId('')}
         onSelectCategory={(catId) => {
+          setQuickViewProduct(null);
           pushModalHistory('category');
           setSelectedCategory(catId);
           scrollToCatalog();
@@ -434,16 +454,7 @@ export default function App() {
       />
 
       {/* Modals & Slide-overs */}
-      {/* 1. Product Detail Modal */}
-      <ProductDetailModal
-        product={quickViewProduct}
-        onClose={() => setQuickViewProduct(null)}
-        onAddToCart={handleAddToCart}
-        onDirectOrder={handleDirectOrder}
-        onToast={showToast}
-      />
-
-      {/* 2. Cart Drawer */}
+      {/* 1. Cart Drawer */}
       <CartDrawer
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
