@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Product, Category, FilterOptions } from '../types';
 import { ProductCard } from './ProductCard';
-import { SlidersHorizontal, ArrowUpDown, Filter, Sparkles, Check } from 'lucide-react';
+import { ArrowUpDown, Filter } from 'lucide-react';
 
 interface ProductCatalogProps {
   products: Product[];
@@ -37,7 +37,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
         if (selectedCategory !== 'all' && product.category !== selectedCategory) {
           return false;
         }
-        // Search Filter (checks title, Bengali title, category, description)
+        // Search Filter
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
           const matchTitle = product.title.toLowerCase().includes(q);
@@ -58,50 +58,48 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
         if (sortBy === 'price_low') return a.price - b.price;
         if (sortBy === 'price_high') return b.price - a.price;
         if (sortBy === 'rating') return b.rating - a.rating;
-        // Default popular
         return (b.reviewCount || 0) - (a.reviewCount || 0);
       });
   }, [products, selectedCategory, searchQuery, inStockOnly, sortBy]);
 
   return (
-    <section id="catalog-section" className="py-10 bg-slate-50 min-h-[600px]">
+    <section id="catalog-section" className="py-10 bg-slate-50/60 min-h-[500px]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         
-        {/* Section Title */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-rose-200 pb-5">
+        {/* Section Header */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 border-b border-slate-200/80 pb-4">
           <div>
-            <div className="flex items-center gap-2 text-rose-700 text-xs font-bold uppercase tracking-wider mb-1">
-              <Sparkles className="w-4 h-4 text-rose-600" />
-              <span>তনু বিউটি পার্লার এন্ড লেজার সেন্টার (CSA শাখা)</span>
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              আমাদের সকল সার্ভিস ও লেজার প্যাকেজ
+            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+              সকল সার্ভিস ও প্যাকেজ
             </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              পছন্দের সার্ভিস সিলেক্ট করে বিস্তারিত দেখুন অথবা সরাসরি বুকিং দিন
+            </p>
           </div>
 
-          <p className="text-xs sm:text-sm text-slate-600 max-w-md">
-            ডুবাইল, সেহড়াতৈল রোড, নাটিয়াপাড়া বাজার, দেলদুয়ার, টাঙ্গাইল। যেকোনো সার্ভিস নির্বাচন করে সরাসরি অ্যাপয়েন্টমেন্ট বুকিং দিন।
-          </p>
+          <div className="text-xs text-slate-500 font-medium">
+            মোট <span className="font-bold text-slate-900">{filteredProducts.length}টি</span> আইটেম
+          </div>
         </div>
 
-        {/* Category Filter Pills Bar */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
+        {/* Category Filter Pills */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
           {categories.map((cat) => {
             const isActive = selectedCategory === cat.id;
             return (
               <button
                 key={cat.id}
                 onClick={() => onSelectCategory(cat.id)}
-                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer ${
                   isActive
-                    ? 'bg-slate-900 text-white shadow-md'
-                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200/80'
+                    ? 'bg-slate-900 text-white shadow-2xs'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
                 }`}
               >
                 <span>{cat.nameBn}</span>
                 <span
-                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    isActive ? 'bg-slate-700 text-emerald-300' : 'bg-slate-100 text-slate-500'
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                    isActive ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-500'
                   }`}
                 >
                   {cat.count}
@@ -111,49 +109,36 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
           })}
         </div>
 
-        {/* Search Result Counter & Sort Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
-          <div className="text-xs sm:text-sm font-medium text-slate-700 flex items-center gap-2">
-            <span className="font-bold text-slate-900">{filteredProducts.length}টি</span> প্রোডাক্ট পাওয়া গেছে
-            {searchQuery && (
-              <span className="text-slate-500">
-                (সার্চ: "<b className="text-emerald-700">{searchQuery}</b>")
-              </span>
-            )}
-          </div>
+        {/* Sort & Filter Bar */}
+        <div className="flex items-center justify-between gap-3 text-xs">
+          <label className="inline-flex items-center gap-1.5 text-slate-600 font-medium cursor-pointer">
+            <input
+              type="checkbox"
+              checked={inStockOnly}
+              onChange={(e) => setInStockOnly(e.target.checked)}
+              className="w-3.5 h-3.5 rounded text-rose-600 focus:ring-rose-500"
+            />
+            <span>শুধুমাত্র স্টকে আছে</span>
+          </label>
 
-          <div className="flex items-center gap-3 text-xs">
-            {/* In Stock Only Checkbox */}
-            <label className="hidden sm:inline-flex items-center gap-1.5 text-slate-600 font-medium cursor-pointer">
-              <input
-                type="checkbox"
-                checked={inStockOnly}
-                onChange={(e) => setInStockOnly(e.target.checked)}
-                className="w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500"
-              />
-              <span>স্টকে আছে শুধুমাত্র</span>
-            </label>
-
-            {/* Sort Dropdown */}
-            <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200">
-              <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as FilterOptions['sortBy'])}
-                className="bg-transparent font-medium text-slate-700 focus:outline-none cursor-pointer"
-              >
-                <option value="popular">জনপ্রিয়তা অনুযায়ী</option>
-                <option value="price_low">কম থেকে বেশি দাম</option>
-                <option value="price_high">বেশি থেকে কম দাম</option>
-                <option value="rating">সর্বোচ্চ কাস্টমার রেটিং</option>
-              </select>
-            </div>
+          <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+            <ArrowUpDown className="w-3 h-3 text-slate-400" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as FilterOptions['sortBy'])}
+              className="bg-transparent text-xs font-medium text-slate-700 focus:outline-none cursor-pointer"
+            >
+              <option value="popular">জনপ্রিয়তা</option>
+              <option value="price_low">কম দাম থেকে শুরু</option>
+              <option value="price_high">বেশি দাম থেকে শুরু</option>
+              <option value="rating">সর্বোচ্চ রেটিং</option>
+            </select>
           </div>
         </div>
 
         {/* Product Cards Grid */}
         {filteredProducts.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
             {filteredProducts.map((product) => (
               <ProductCard
                 key={product.id}
@@ -166,22 +151,19 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
             ))}
           </div>
         ) : (
-          /* Empty Search / Filter State */
-          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-md mx-auto space-y-4">
-            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-400">
-              <Filter className="w-8 h-8" />
+          <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center max-w-sm mx-auto space-y-3">
+            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-400">
+              <Filter className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-bold text-slate-900">কোনো প্রোডাক্ট পাওয়া যায়নি!</h3>
+            <h3 className="text-base font-bold text-slate-900">কোনো সার্ভিস পাওয়া যায়নি</h3>
             <p className="text-xs text-slate-500">
-              আপনার সার্চ বা ক্যাটেগরি ফিল্টারে কোনো প্রোডাক্ট মেলেনি। অন্য কি-ওয়ার্ড বা ক্যাটেগরি চেষ্টা করুন।
+              অন্য কোনো কি-ওয়ার্ড বা ক্যাটেগরি নির্বাচন করে চেষ্টা করুন।
             </p>
             <button
-              onClick={() => {
-                onSelectCategory('all');
-              }}
-              className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition-colors cursor-pointer"
+              onClick={() => onSelectCategory('all')}
+              className="px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold text-xs transition-colors cursor-pointer"
             >
-              সব প্রোডাক্ট দেখুন
+              সবগুলো দেখুন
             </button>
           </div>
         )}
