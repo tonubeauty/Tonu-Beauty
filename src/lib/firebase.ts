@@ -14,14 +14,26 @@ import {
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Order, Product } from '../types';
 
-// Initialize Firebase App
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+// Safely initialize Firebase App
+let app: any = null;
+let dbInstance: any = null;
 
-// Initialize Firestore with custom database ID if available
-export const db =
-  firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
-    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-    : getFirestore(app);
+try {
+  const config = (firebaseConfig as any) || {};
+  if (config && config.projectId && config.apiKey) {
+    app = getApps().length === 0 ? initializeApp(config) : getApps()[0];
+    dbInstance =
+      config.firestoreDatabaseId && config.firestoreDatabaseId !== '(default)'
+        ? getFirestore(app, config.firestoreDatabaseId)
+        : getFirestore(app);
+  } else {
+    console.warn('Firebase config incomplete. Running in offline/local mode.');
+  }
+} catch (err) {
+  console.warn('Failed to initialize Firebase app or Firestore:', err);
+}
+
+export const db = dbInstance;
 
 const ORDERS_COLLECTION = 'orders';
 const PRODUCTS_COLLECTION = 'products';
@@ -29,6 +41,7 @@ const PRODUCTS_COLLECTION = 'products';
 // Save or create an order in Firestore
 export async function saveOrderToFirestore(order: Order): Promise<boolean> {
   try {
+    if (!db) return false;
     const docRef = doc(db, ORDERS_COLLECTION, order.orderId);
     await setDoc(docRef, {
       ...order,
@@ -44,6 +57,7 @@ export async function saveOrderToFirestore(order: Order): Promise<boolean> {
 // Fetch all orders from Firestore
 export async function getOrdersFromFirestore(): Promise<Order[]> {
   try {
+    if (!db) return [];
     const q = query(collection(db, ORDERS_COLLECTION));
     const snapshot = await getDocs(q);
     const orders: Order[] = [];
@@ -64,6 +78,7 @@ export async function updateOrderStatusInFirestore(
   newStatus: Order['status']
 ): Promise<boolean> {
   try {
+    if (!db) return false;
     const docRef = doc(db, ORDERS_COLLECTION, orderId);
     await updateDoc(docRef, {
       status: newStatus,
@@ -79,6 +94,7 @@ export async function updateOrderStatusInFirestore(
 // Delete order from Firestore
 export async function deleteOrderFromFirestore(orderId: string): Promise<boolean> {
   try {
+    if (!db) return false;
     const docRef = doc(db, ORDERS_COLLECTION, orderId);
     await deleteDoc(docRef);
     return true;
@@ -91,6 +107,7 @@ export async function deleteOrderFromFirestore(orderId: string): Promise<boolean
 // Subscribe to real-time orders updates
 export function subscribeToOrders(onUpdate: (orders: Order[]) => void) {
   try {
+    if (!db) return () => {};
     const q = query(collection(db, ORDERS_COLLECTION));
     return onSnapshot(
       q,
@@ -115,6 +132,7 @@ export function subscribeToOrders(onUpdate: (orders: Order[]) => void) {
 // Save products to Firestore
 export async function saveProductsToFirestore(products: Product[]): Promise<boolean> {
   try {
+    if (!db) return false;
     for (const prod of products) {
       const docRef = doc(db, PRODUCTS_COLLECTION, prod.id);
       await setDoc(docRef, prod, { merge: true });
@@ -129,6 +147,7 @@ export async function saveProductsToFirestore(products: Product[]): Promise<bool
 // Fetch products from Firestore
 export async function getProductsFromFirestore(): Promise<Product[]> {
   try {
+    if (!db) return [];
     const snapshot = await getDocs(collection(db, PRODUCTS_COLLECTION));
     const products: Product[] = [];
     snapshot.forEach((docSnap) => {
