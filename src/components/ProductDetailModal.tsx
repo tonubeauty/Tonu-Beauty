@@ -17,18 +17,18 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   onDirectOrder,
   onToast,
 }) => {
-  if (!product) return null;
-
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedColor, setSelectedColor] = useState<string | undefined>(
-    product.colors && product.colors.length > 0 ? product.colors[0] : undefined
+    product?.colors && product.colors.length > 0 ? product.colors[0] : undefined
   );
   const [selectedSize, setSelectedSize] = useState<string | undefined>(
-    product.sizes && product.sizes.length > 0 ? product.sizes[0] : undefined
+    product?.sizes && product.sizes.length > 0 ? product.sizes[0] : undefined
   );
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState<'desc' | 'specs' | 'delivery'>('desc');
   const [isCopied, setIsCopied] = useState(false);
+
+  if (!product) return null;
 
   const handleShareModal = async () => {
     if (!product) return;

@@ -27,8 +27,6 @@ export const BeautyAppointmentModal: React.FC<BeautyAppointmentModalProps> = ({
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [bookingId, setBookingId] = useState('');
 
-  if (!isOpen) return null;
-
   const serviceOptions = [
     'CSA লেজার স্থায়ী হেয়ার রিমুভাল',
     'CSA লেজার মেছতা ও ব্রণের দাগ রিমুভাল',
@@ -106,6 +104,8 @@ export const BeautyAppointmentModal: React.FC<BeautyAppointmentModalProps> = ({
     setNotes('');
     onClose();
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">

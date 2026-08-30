@@ -161,6 +161,18 @@ export default function App() {
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const productId = urlParams.get('product') || urlParams.get('p');
+        const trackId = urlParams.get('track') || urlParams.get('order');
+        const adminParam = urlParams.get('admin');
+
+        if (adminParam === 'true' || adminParam === '1') {
+          setCurrentView('admin');
+        }
+
+        if (trackId) {
+          setTrackOrderId(trackId);
+          setIsTrackModalOpen(true);
+        }
+
         if (productId && products.length > 0) {
           const match = products.find((p) => p.id === productId);
           if (match) {

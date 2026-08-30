@@ -13,9 +13,9 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
   onClose,
   onTrackOrder,
 }) => {
-  if (!order) return null;
-
   const [copied, setCopied] = React.useState(false);
+
+  if (!order) return null;
 
   const handleCopyOrderId = () => {
     navigator.clipboard.writeText(order.orderId);

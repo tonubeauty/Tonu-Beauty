@@ -1,48 +1,47 @@
-import React, { useState, useEffect } from 'react';
-import { Product, Order, Category } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Product, Order, Category, OrderItem } from '../types';
 import {
   getOrdersFromFirestore,
   subscribeToOrders,
   updateOrderStatusInFirestore,
   deleteOrderFromFirestore,
-  saveProductsToFirestore
+  saveOrderToFirestore,
+  saveProductsToFirestore,
 } from '../lib/firebase';
 import { compressImageFileToMaxKB } from '../lib/imageCompressor';
+import { A4PrintInvoice } from './A4PrintInvoice';
 import {
   LayoutDashboard,
-  PackageCheck,
+  ClipboardList,
+  Receipt,
+  Users,
   Sparkles,
+  Settings,
   Plus,
-  Edit,
   Trash2,
   Phone,
-  MapPin,
   Search,
-  Filter,
   Lock,
   LogOut,
-  Save,
-  DollarSign,
-  TrendingUp,
-  Calendar,
+  ArrowLeft,
+  Clock,
+  CheckCircle2,
+  X,
+  Upload,
+  Loader2,
+  Printer,
+  FileText,
+  UserCheck,
+  AlertCircle,
   Eye,
   RefreshCw,
   Tag,
-  ShieldCheck,
-  AlertTriangle,
-  ArrowLeft,
-  Clock,
-  User,
-  ExternalLink,
-  Sliders,
-  CheckCircle2,
-  X,
-  Building2,
-  ChevronRight,
-  BarChart3,
-  Upload,
-  Loader2,
-  Boxes
+  DollarSign,
+  TrendingUp,
+  MapPin,
+  Calendar,
+  Save,
+  QrCode
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -60,41 +59,68 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onToast,
   onBackToWebsite,
 }) => {
-  // Authentication State
+  // Authentication State (Passcode strictly 3795)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem('tanu_admin_auth') === 'true';
   });
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // Active Tab: 'overview' | 'orders' | 'services' | 'add_edit_service' | 'settings'
-  const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'services' | 'add_edit_service' | 'settings'>('overview');
+  // Active Navigation Tabs: 'overview' | 'orders' | 'billing' | 'statements' | 'services' | 'settings'
+  const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'billing' | 'statements' | 'services' | 'settings'>('overview');
 
-  // Orders State
+  // Orders State (synced from Firestore)
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
-  const [selectedOrderDetails, setSelectedOrderDetails] = useState<Order | null>(null);
+
+  // A4 Invoice Modal State
+  const [printInvoiceOrder, setPrintInvoiceOrder] = useState<Order | null>(null);
+
+  // Parlour Info
+  const [parlourInfo, setParlourInfo] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tanu_parlour_info');
+      return saved
+        ? JSON.parse(saved)
+        : {
+            branchName: 'তনু বিউটি পার্লার এন্ড লেজার সেন্টার',
+            hotline: '01302383795',
+            address: 'ডুবাইল, সেহড়াতৈল রোড, নাটিয়াপাড়া বাজার, দেলদুয়ার, টাঙ্গাইল',
+            hours: 'সকাল ১০:০০ টা - রাত ৮:০০ টা (প্রতিদিন খোলা)',
+          };
+    } catch {
+      return {
+        branchName: 'তনু বিউটি পার্লার এন্ড লেজার সেন্টার',
+        hotline: '01302383795',
+        address: 'ডুবাইল, সেহড়াতৈল রোড, নাটিয়াপাড়া বাজার, দেলদুয়ার, টাঙ্গাইল',
+        hours: 'সকাল ১০:০০ টা - রাত ৮:০০ টা (প্রতিদিন খোলা)',
+      };
+    }
+  });
+
+  // Manual Billing Form State
+  const [billCustomerPhone, setBillCustomerPhone] = useState('');
+  const [billCustomerName, setBillCustomerName] = useState('');
+  const [billCustomerAddress, setBillCustomerAddress] = useState('');
+  const [billCustomerDistrict, setBillCustomerDistrict] = useState('টাঙ্গাইল');
+  const [billPaymentMethod, setBillPaymentMethod] = useState<'cash' | 'bkash' | 'nagad' | 'cod'>('cash');
+  const [billDiscount, setBillDiscount] = useState<number>(0);
+  const [billPaidAmount, setBillPaidAmount] = useState<string>('');
+  const [billNotes, setBillNotes] = useState('');
+  const [billItems, setBillItems] = useState<OrderItem[]>([
+    { productId: products[0]?.id || 'custom-1', productTitle: products[0]?.titleBn || 'সিএসএ লেজার ট্রিটমেন্ট', quantity: 1, price: products[0]?.price || 1500 }
+  ]);
+  const [isSavingBill, setIsSavingBill] = useState(false);
+  const [matchedCustomerInfo, setMatchedCustomerInfo] = useState<{ count: number; totalSpent: number } | null>(null);
+
+  // Customer Statement Search State
+  const [statementPhoneQuery, setStatementPhoneQuery] = useState('');
 
   // Service Edit Form State
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [formData, setFormData] = useState<{
-    id: string;
-    title: string;
-    titleBn: string;
-    category: string;
-    categoryBn: string;
-    price: number;
-    originalPrice: number;
-    description: string;
-    descriptionBn: string;
-    keyFeaturesBn: string;
-    imageUrl: string;
-    stockCount: number;
-    isFeatured: boolean;
-    isBestSeller: boolean;
-  }>({
+  const [serviceFormData, setServiceFormData] = useState({
     id: '',
     title: '',
     titleBn: '',
@@ -102,95 +128,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     categoryBn: 'CSA লেজার ট্রিটমেন্ট',
     price: 0,
     originalPrice: 0,
-    description: '',
     descriptionBn: '',
-    keyFeaturesBn: '',
     imageUrl: 'https://images.unsplash.com/photo-1560750588-73207b1ef5b8?auto=format&fit=crop&w=800&q=80',
     stockCount: 50,
-    isFeatured: false,
-    isBestSeller: false,
   });
-
-  // Image Upload Compression & Restock Modal States
   const [isCompressingImage, setIsCompressingImage] = useState(false);
-  const [imageKbSize, setImageKbSize] = useState<number | null>(null);
 
-  // Quick Restock Popup State
-  const [restockProduct, setRestockProduct] = useState<Product | null>(null);
-  const [addStockQty, setAddStockQty] = useState<number>(10);
-
-  // Parlour Settings State
-  const [parlourInfo, setParlourInfo] = useState(() => {
-    try {
-      const saved = localStorage.getItem('tanu_parlour_info');
-      return saved
-        ? JSON.parse(saved)
-        : {
-            branchName: 'তনু বিউটি পার্লার এন্ড লেজার সেন্টার (CSA শাখা)',
-            hotline: '01302383795',
-            address: 'ডুবাইল, সেহড়াতৈল রোড, নাটিয়াপাড়া বাজার, দেলদুয়ার, টাঙ্গাইল',
-            hours: 'সকাল ১০:০০ টা - রাত ৮:০০ টা (প্রতিদিন খোলা)',
-            notice: 'বিশেষ ছাড় চলছে! আধুনিক CSA লেজার প্রযুক্তিতে স্থায়ী হেয়ার রিমুভাল ও স্কিন কেয়ার।',
-          };
-    } catch {
-      return {
-        branchName: 'তনু বিউটি পার্লার এন্ড লেজার সেন্টার (CSA শাখা)',
-        hotline: '01302383795',
-        address: 'ডুবাইল, সেহড়াতৈল রোড, নাটিয়াপাড়া বাজার, দেলদুয়ার, টাঙ্গাইল',
-        hours: 'সকাল ১০:০০ টা - রাত ৮:০০ টা (প্রতিদিন খোলা)',
-        notice: 'বিশেষ ছাড় চলছে! আধুনিক CSA লেজার প্রযুক্তিতে স্থায়ী হেয়ার রিমুভাল ও স্কিন কেয়ার।',
-      };
-    }
-  });
-
-  // Fetch orders from Firestore, server API, or local storage
-  const fetchOrders = async () => {
-    setIsLoadingOrders(true);
-    try {
-      // 1. Try fetching from Firestore first
-      const fsOrders = await getOrdersFromFirestore();
-      if (fsOrders && fsOrders.length > 0) {
-        setOrders(fsOrders);
-        setIsLoadingOrders(false);
-        return;
-      }
-
-      // 2. Fallback to server API
-      const res = await fetch('/api/orders/track?query=BD');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.orders && data.orders.length > 0) {
-          setOrders(data.orders);
-        } else {
-          loadOrdersFromLocal();
-        }
-      } else {
-        loadOrdersFromLocal();
-      }
-    } catch {
-      loadOrdersFromLocal();
-    } finally {
-      setIsLoadingOrders(false);
-    }
-  };
-
-  const loadOrdersFromLocal = () => {
-    const localSaved = localStorage.getItem('tanu_orders');
-    if (localSaved) {
-      try {
-        setOrders(JSON.parse(localSaved));
-      } catch {
-        setOrders([]);
-      }
-    } else {
-      setOrders([]);
-    }
-  };
-
-  // Real-time Firestore order subscription when authenticated
+  // Initial Data Fetch & Firestore Real-Time Subscription
   useEffect(() => {
     if (isAuthenticated) {
-      fetchOrders();
+      setIsLoadingOrders(true);
+      getOrdersFromFirestore().then((initialOrders) => {
+        if (initialOrders && initialOrders.length > 0) {
+          setOrders(initialOrders);
+        } else {
+          const localSaved = localStorage.getItem('tanu_orders');
+          if (localSaved) {
+            try {
+              setOrders(JSON.parse(localSaved));
+            } catch (e) {
+              console.error(e);
+            }
+          }
+        }
+        setIsLoadingOrders(false);
+      }).catch(() => {
+        setIsLoadingOrders(false);
+      });
+
       const unsubscribe = subscribeToOrders((updatedOrders) => {
         if (updatedOrders && updatedOrders.length > 0) {
           setOrders(updatedOrders);
@@ -200,1485 +165,1507 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   }, [isAuthenticated]);
 
-  // Helper to resolve product thumbnail image
-  const getItemImageUrl = (item: Order['items'][0]) => {
-    if (item.image && typeof item.image === 'string' && item.image.trim().length > 0) {
-      return item.image;
-    }
-    const matchById = products.find((p) => p.id === item.productId);
-    if (matchById && matchById.images && matchById.images[0]) {
-      return matchById.images[0];
-    }
-    const matchByTitle = products.find(
-      (p) => p.titleBn === item.productTitle || p.title === item.productTitle
-    );
-    if (matchByTitle && matchByTitle.images && matchByTitle.images[0]) {
-      return matchByTitle.images[0];
-    }
-    return 'https://images.unsplash.com/photo-1560750588-73207b1ef5b8?auto=format&fit=crop&w=300&q=80';
-  };
-
-  // Handle Login
+  // Handle Login with Passcode
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (passwordInput === '1234' || passwordInput === 'admin123' || passwordInput === 'tanubeauty') {
+    const cleanPass = passwordInput.trim();
+    if (cleanPass === '3795' || cleanPass === '01302383795') {
       setIsAuthenticated(true);
       localStorage.setItem('tanu_admin_auth', 'true');
+      setPasswordInput('');
       setLoginError('');
       onToast('এডমিন লগইন সফল হয়েছে!');
     } else {
-      setLoginError('ভুল পাসওয়ার্ড! অনুগ্রহ করে সঠিক পাসওয়ার্ড দিন। (যেমন: 1234)');
+      setLoginError('ভুল পাসকোড! অনুগ্রহ করে সঠিক পাসকোড দিন।');
     }
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
+    setPasswordInput('');
+    setLoginError('');
     localStorage.removeItem('tanu_admin_auth');
-    onToast('এডমিন প্যানেল থেকে লগআউট করা হয়েছে');
+    sessionStorage.clear();
+    onToast('এডমিন প্যানেল থেকে সফলভাবে লগআউট করা হয়েছে');
+    onBackToWebsite();
   };
 
-  // Status Change for Order (Auto-deduct stock on Delivery)
+  // Smart Autofill when typing Customer Phone Number in Billing Tab
+  useEffect(() => {
+    const cleanPhone = billCustomerPhone.replace(/[\s-]/g, '').trim();
+    if (cleanPhone.length >= 6) {
+      const pastMatch = orders.find(o => o.phone.replace(/[\s-]/g, '').includes(cleanPhone));
+      if (pastMatch) {
+        if (!billCustomerName) setBillCustomerName(pastMatch.customerName);
+        if (!billCustomerAddress) setBillCustomerAddress(pastMatch.address);
+        if (pastMatch.district && !billCustomerDistrict) setBillCustomerDistrict(pastMatch.district);
+
+        // Calculate total stats for this customer
+        const customerOrders = orders.filter(o => o.phone.replace(/[\s-]/g, '') === pastMatch.phone.replace(/[\s-]/g, ''));
+        const totalSpent = customerOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+        setMatchedCustomerInfo({ count: customerOrders.length, totalSpent });
+        return;
+      }
+    }
+    setMatchedCustomerInfo(null);
+  }, [billCustomerPhone, orders]);
+
+  // Order Status update
   const handleStatusChange = async (orderId: string, newStatus: Order['status']) => {
-    const targetOrder = orders.find((o) => o.orderId === orderId);
-    
-    // Deduct product stock automatically if order is delivered
-    if (newStatus === 'delivered' && targetOrder && targetOrder.status !== 'delivered') {
-      const updatedProducts = products.map((prod) => {
-        const itemInOrder = targetOrder.items.find((i) => i.productId === prod.id || i.productTitle === prod.titleBn);
-        if (itemInOrder) {
-          const newQty = Math.max(0, (prod.stockCount || 0) - itemInOrder.quantity);
-          return { ...prod, stockCount: newQty };
+    try {
+      const updated = orders.map(o => {
+        if (o.orderId === orderId) {
+          const updatedHistory = [...(o.trackingHistory || [])];
+          let titleBn = 'স্ট্যাটাস আপডেট';
+          let descBn = 'আপনার বুকিং এর স্ট্যাটাস পরিবর্তন করা হয়েছে।';
+          if (newStatus === 'confirmed') {
+            titleBn = 'বুকিং গ্রহণ ও নিশ্চিত';
+            descBn = 'তনু পার্লার ও লেজার শাখা থেকে আপনার বুকিং নিশ্চিত করা হয়েছে।';
+          } else if (newStatus === 'processing') {
+            titleBn = 'সার্ভিস প্রক্রিয়াধীন';
+            descBn = 'সিরিয়াল বা ডেলিভারি প্রস্তুত করা হচ্ছে।';
+          } else if (newStatus === 'delivered') {
+            titleBn = 'সার্ভিস সম্পন্ন / ডেলিভার্ড';
+            descBn = 'সার্ভিস বা অর্ডার সফলভাবে সম্পন্ন হয়েছে।';
+          }
+          updatedHistory.push({
+            status: newStatus,
+            titleBn,
+            timestamp: new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
+            descriptionBn: descBn,
+            completed: true
+          });
+          return { ...o, status: newStatus, trackingHistory: updatedHistory };
         }
-        return prod;
+        return o;
       });
 
-      onUpdateProducts(updatedProducts);
-      saveProductsToFirestore(updatedProducts);
-      onToast(`অর্ডার #${orderId} 'ডেলিভার্ড' হওয়ায় প্রোডাক্ট স্টক থেকে স্বয়ংক্রিয়ভাবে হ্রাস পেয়েছে!`);
+      setOrders(updated);
+      await updateOrderStatusInFirestore(orderId, newStatus);
+      localStorage.setItem('tanu_orders', JSON.stringify(updated));
+      onToast(`অর্ডার (${orderId}) স্ট্যাটাস '${newStatus}' করা হয়েছে`);
+    } catch (e) {
+      console.error(e);
+      onToast('স্ট্যাটাস আপডেট হতে সমস্যা হয়েছে');
     }
-
-    const updated = orders.map((ord) => {
-      if (ord.orderId === orderId) {
-        return { ...ord, status: newStatus };
-      }
-      return ord;
-    });
-
-    setOrders(updated);
-    localStorage.setItem('tanu_orders', JSON.stringify(updated));
-    await updateOrderStatusInFirestore(orderId, newStatus);
-    onToast(`অর্ডার #${orderId} এর স্ট্যাটাস '${newStatus}' ফায়ারবেসে সংরক্ষিত হয়েছে`);
-  };
-
-  // Image Upload and Auto-compression to <= 100KB
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsCompressingImage(true);
-    try {
-      const compressedDataUrl = await compressImageFileToMaxKB(file, 100);
-      const base64Str = compressedDataUrl.split(',')[1] || '';
-      const approxKB = Math.round((base64Str.length * 3) / 4 / 1024);
-      setImageKbSize(approxKB);
-      setFormData((prev) => ({ ...prev, imageUrl: compressedDataUrl }));
-      onToast(`ছবি সফলভাবে কমপ্রেস করা হয়েছে (${approxKB} KB - ১০০KB এর নিচে)`);
-    } catch (err) {
-      console.error('Image compression error:', err);
-      alert('ছবি প্রসেস করতে সমস্যা হয়েছে।');
-    } finally {
-      setIsCompressingImage(false);
-    }
-  };
-
-  // Quick Restock Handler
-  const handleApplyRestock = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!restockProduct) return;
-
-    const added = Number(addStockQty) || 0;
-    if (added <= 0) {
-      alert('অনুগ্রহ করে সঠিক স্টক পরিমাণ প্রবেশ করান।');
-      return;
-    }
-
-    const updatedList = products.map((p) => {
-      if (p.id === restockProduct.id) {
-        const newStock = (p.stockCount || 0) + added;
-        return { ...p, stockCount: newStock };
-      }
-      return p;
-    });
-
-    onUpdateProducts(updatedList);
-    saveProductsToFirestore(updatedList);
-    onToast(`'${restockProduct.titleBn}' পণ্যে +${added} টি নতুন স্টক যুক্ত হয়েছে! (মোট: ${(restockProduct.stockCount || 0) + added} টি)`);
-    setRestockProduct(null);
   };
 
   // Delete Order
   const handleDeleteOrder = async (orderId: string) => {
-    if (window.confirm(`আপনি কি নিশ্চিত অর্ডার #${orderId} টি মুছে ফেলতে চান?`)) {
-      const updated = orders.filter((o) => o.orderId !== orderId);
+    if (window.confirm(`আপনি কি সত্যিই অর্ডারটি (${orderId}) ডিলিট করতে চান?`)) {
+      const updated = orders.filter(o => o.orderId !== orderId);
       setOrders(updated);
-      localStorage.setItem('tanu_orders', JSON.stringify(updated));
       await deleteOrderFromFirestore(orderId);
-      onToast(`অর্ডার #${orderId} মুছে ফেলা হয়েছে`);
-      if (selectedOrderDetails?.orderId === orderId) {
-        setSelectedOrderDetails(null);
-      }
+      localStorage.setItem('tanu_orders', JSON.stringify(updated));
+      onToast('অর্ডার ডিলিট করা হয়েছে');
     }
   };
 
-  // Form Start Actions
-  const startAddProduct = () => {
-    setEditingProduct(null);
-    setFormData({
-      id: 'srv-' + Date.now(),
-      title: '',
-      titleBn: '',
-      category: 'csa_laser',
-      categoryBn: 'CSA লেজার ট্রিটমেন্ট',
-      price: 1000,
-      originalPrice: 2000,
-      description: '',
-      descriptionBn: '',
-      keyFeaturesBn: '১০০% ব্যথামুক্ত বিশ্বমানের CSA লেজার\nঅভিজ্ঞ নারী বিশেষজ্ঞ টিম\nসম্পূর্ণ হাইজিনিক স্যানিটাইজড পরিবেশ',
-      imageUrl: 'https://images.unsplash.com/photo-1560750588-73207b1ef5b8?auto=format&fit=crop&w=800&q=80',
-      stockCount: 50,
-      isFeatured: true,
-      isBestSeller: false,
-    });
-    setActiveTab('add_edit_service');
+  // Billing Item Operations
+  const handleAddBillItem = () => {
+    setBillItems(prev => [
+      ...prev,
+      { productId: `custom-${Date.now()}`, productTitle: '', quantity: 1, price: 500 }
+    ]);
   };
 
-  const startEditProduct = (prod: Product) => {
-    setEditingProduct(prod);
-    setFormData({
-      id: prod.id,
-      title: prod.title,
-      titleBn: prod.titleBn,
-      category: prod.category,
-      categoryBn: prod.categoryBn,
-      price: prod.price,
-      originalPrice: prod.originalPrice,
-      description: prod.description,
-      descriptionBn: prod.descriptionBn,
-      keyFeaturesBn: prod.keyFeaturesBn ? prod.keyFeaturesBn.join('\n') : '',
-      imageUrl: prod.images[0] || '',
-      stockCount: prod.stockCount || 50,
-      isFeatured: !!prod.isFeatured,
-      isBestSeller: !!prod.isBestSeller,
-    });
-    setActiveTab('add_edit_service');
-  };
-
-  const handleDeleteProduct = (productId: string, titleBn: string) => {
-    if (window.confirm(`আপনি কি নিশ্চিত '${titleBn}' সার্ভিসটি ডিলিট করতে চান?`)) {
-      const updated = products.filter((p) => p.id !== productId);
-      onUpdateProducts(updated);
-      onToast(`'${titleBn}' মুছে ফেলা হয়েছে!`);
+  const handleRemoveBillItem = (index: number) => {
+    if (billItems.length > 1) {
+      setBillItems(prev => prev.filter((_, i) => i !== index));
     }
   };
 
-  // Save Service / Product
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleBillItemChange = (index: number, field: keyof OrderItem, value: any) => {
+    setBillItems(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const handleSelectProductForBill = (index: number, prodId: string) => {
+    const selectedProd = products.find(p => p.id === prodId);
+    if (selectedProd) {
+      setBillItems(prev => {
+        const updated = [...prev];
+        updated[index] = {
+          ...updated[index],
+          productId: selectedProd.id,
+          productTitle: selectedProd.titleBn,
+          price: selectedProd.price,
+        };
+        return updated;
+      });
+    }
+  };
+
+  // Calculations for Manual Bill
+  const billSubtotal = useMemo(() => {
+    return billItems.reduce((sum, it) => sum + ((it.price || 0) * (it.quantity || 1)), 0);
+  }, [billItems]);
+
+  const billGrandTotal = Math.max(0, billSubtotal - (billDiscount || 0));
+  const parsedPaid = billPaidAmount !== '' ? Number(billPaidAmount) : billGrandTotal;
+  const billDueAmount = Math.max(0, billGrandTotal - parsedPaid);
+
+  // Submit Manual Bill & Save to Firebase
+  const handleSaveManualBill = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.titleBn.trim() || formData.price <= 0) {
-      alert('অনুগ্রহ করে সেবার নাম ও সঠিক অফার মূল্য প্রদান করুন।');
+    if (!billCustomerName.trim() || !billCustomerPhone.trim()) {
+      onToast('অনুগ্রহ করে কাস্টমারের নাম ও মোবাইল নম্বর লিখুন');
+      return;
+    }
+    if (billItems.some(it => !it.productTitle.trim() || it.price <= 0)) {
+      onToast('অনুগ্রহ করে প্রতিটি আইটেমের নাম ও সঠিক মূল্য দিন');
       return;
     }
 
-    const discount =
-      formData.originalPrice > formData.price
-        ? Math.round(((formData.originalPrice - formData.price) / formData.originalPrice) * 100)
-        : 0;
+    setIsSavingBill(true);
+    const invoiceId = `TB-INV-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    const featureArray = formData.keyFeaturesBn
-      .split('\n')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-
-    const categoryObj = categories.find((c) => c.id === formData.category);
-    const categoryBn = categoryObj ? categoryObj.nameBn : formData.categoryBn;
-
-    const newOrUpdatedProd: Product = {
-      id: formData.id || 'srv-' + Date.now(),
-      title: formData.title || formData.titleBn,
-      titleBn: formData.titleBn,
-      category: formData.category,
-      categoryBn,
-      price: Number(formData.price),
-      originalPrice: Number(formData.originalPrice) || Number(formData.price),
-      discountPercent: discount,
-      rating: editingProduct ? editingProduct.rating : 4.95,
-      reviewCount: editingProduct ? editingProduct.reviewCount : 50,
-      stockCount: Number(formData.stockCount) || 50,
-      isFeatured: formData.isFeatured,
-      isBestSeller: formData.isBestSeller,
-      images: [
-        formData.imageUrl ||
-          'https://images.unsplash.com/photo-1560750588-73207b1ef5b8?auto=format&fit=crop&w=800&q=80',
-      ],
-      description: formData.description || formData.descriptionBn,
-      descriptionBn: formData.descriptionBn,
-      keyFeaturesBn: featureArray,
-      specs: {
-        'পার্লারের নাম': 'তনু বিউটি পার্লার এন্ড লেজার সেন্টার',
-        'শাখা': 'CSA লেজারের একটি শাখা',
-        'ঠিকানা': parlourInfo.address,
-        'হটলাইন': parlourInfo.hotline,
-      },
-      warrantyBn: '১০০% নিরাপদ ও স্যানিটাইজড সার্ভিস',
-      deliveryDaysBn: 'অনলাইন বুকিং ও সরাসরি ভিজিট',
+    const newBillOrder: Order = {
+      orderId: invoiceId,
+      createdAt: new Date().toISOString(),
+      customerName: billCustomerName.trim(),
+      phone: billCustomerPhone.trim(),
+      address: billCustomerAddress.trim() || 'নাটিয়াপাড়া, দেলদুয়ার',
+      district: billCustomerDistrict.trim() || 'টাঙ্গাইল',
+      orderType: 'manual_bill',
+      items: billItems.map(it => ({
+        productId: it.productId || `prod-${Date.now()}`,
+        productTitle: it.productTitle,
+        quantity: Number(it.quantity) || 1,
+        price: Number(it.price) || 0,
+      })),
+      subtotal: billSubtotal,
+      deliveryFee: 0,
+      discount: billDiscount,
+      totalAmount: billGrandTotal,
+      paidAmount: parsedPaid,
+      dueAmount: billDueAmount,
+      paymentMethod: billPaymentMethod,
+      status: 'delivered', // Manual bills are usually done on spot
+      notes: billNotes.trim(),
+      trackingHistory: [
+        {
+          status: 'confirmed',
+          titleBn: 'বিল তৈরি ও এন্ট্রি',
+          timestamp: new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
+          descriptionBn: 'ম্যানুয়াল বিল তৈরি করা হয়েছে।',
+          completed: true,
+        },
+        {
+          status: 'delivered',
+          titleBn: 'সার্ভিস সম্পন্ন ও রিসিট প্রদান',
+          timestamp: new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
+          descriptionBn: 'পেমেন্ট গ্রহণ ও কাস্টমার কপি প্রস্তুত।',
+          completed: true,
+        }
+      ]
     };
 
-    let updatedList: Product[];
-    if (editingProduct) {
-      updatedList = products.map((p) => (p.id === editingProduct.id ? newOrUpdatedProd : p));
-      onToast(`'${formData.titleBn}' সার্ভিস আপডেট করা হয়েছে!`);
-    } else {
-      updatedList = [newOrUpdatedProd, ...products];
-      onToast(`নতুন সার্ভিস '${formData.titleBn}' সফলভাবে যুক্ত হয়েছে!`);
-    }
+    try {
+      // 1. Save to Firebase Firestore
+      await saveOrderToFirestore(newBillOrder);
 
-    onUpdateProducts(updatedList);
-    saveProductsToFirestore(updatedList);
-    setActiveTab('services');
+      // 2. Save locally
+      const updated = [newBillOrder, ...orders];
+      setOrders(updated);
+      localStorage.setItem('tanu_orders', JSON.stringify(updated));
+
+      onToast(`ইনভয়েস (${invoiceId}) সফলভাবে সেভ হয়েছে!`);
+
+      // 3. Open A4 print invoice directly
+      setPrintInvoiceOrder(newBillOrder);
+
+      // Reset form for next bill
+      setBillCustomerName('');
+      setBillCustomerPhone('');
+      setBillCustomerAddress('');
+      setBillDiscount(0);
+      setBillPaidAmount('');
+      setBillNotes('');
+      setBillItems([
+        { productId: products[0]?.id || 'custom-1', productTitle: products[0]?.titleBn || 'সিএসএ লেজার ট্রিটমেন্ট', quantity: 1, price: products[0]?.price || 1500 }
+      ]);
+    } catch (err) {
+      console.error(err);
+      onToast('বিল সেভ করতে সমস্যা হয়েছে');
+    } finally {
+      setIsSavingBill(false);
+    }
   };
+
+  // Filtered Orders List
+  const filteredOrders = useMemo(() => {
+    return orders.filter(order => {
+      const q = orderSearchQuery.toLowerCase().trim();
+      const matchQuery =
+        !q ||
+        order.orderId.toLowerCase().includes(q) ||
+        order.customerName.toLowerCase().includes(q) ||
+        order.phone.includes(q);
+
+      const matchStatus = orderStatusFilter === 'all' || order.status === orderStatusFilter;
+      return matchQuery && matchStatus;
+    });
+  }, [orders, orderSearchQuery, orderStatusFilter]);
+
+  // Customer Statement Calculation based on search query
+  const statementCustomerData = useMemo(() => {
+    const q = statementPhoneQuery.trim().replace(/[\s-]/g, '');
+    if (!q) return null;
+
+    const matchedOrders = orders.filter(o =>
+      o.phone.replace(/[\s-]/g, '').includes(q) ||
+      (o.customerName && o.customerName.toLowerCase().includes(q.toLowerCase()))
+    );
+
+    if (matchedOrders.length === 0) return null;
+
+    const latestOrder = matchedOrders[0];
+    const totalSpent = matchedOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+    const totalPaid = matchedOrders.reduce((sum, o) => sum + (o.paidAmount !== undefined ? o.paidAmount : (o.totalAmount || 0)), 0);
+    const totalDue = matchedOrders.reduce((sum, o) => sum + (o.dueAmount || 0), 0);
+
+    // List of all items taken
+    const allServices: { title: string; count: number; total: number }[] = [];
+    matchedOrders.forEach(o => {
+      o.items.forEach(it => {
+        const existing = allServices.find(s => s.title === it.productTitle);
+        if (existing) {
+          existing.count += it.quantity;
+          existing.total += (it.price * it.quantity);
+        } else {
+          allServices.push({ title: it.productTitle, count: it.quantity, total: (it.price * it.quantity) });
+        }
+      });
+    });
+
+    return {
+      customerName: latestOrder.customerName,
+      phone: latestOrder.phone,
+      address: latestOrder.address,
+      district: latestOrder.district,
+      totalOrdersCount: matchedOrders.length,
+      totalSpent,
+      totalPaid,
+      totalDue,
+      ordersList: matchedOrders,
+      servicesSummary: allServices,
+    };
+  }, [orders, statementPhoneQuery]);
 
   // Save Parlour Settings
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem('tanu_parlour_info', JSON.stringify(parlourInfo));
-    onToast('পার্লারের তথ্য সফলভাবে সংরক্ষণ করা হয়েছে!');
+    onToast('পার্লার তথ্য সফলভাবে সংরক্ষিত হয়েছে');
   };
 
-  // Filtered Orders
-  const filteredOrders = orders.filter((ord) => {
-    const matchesSearch =
-      ord.orderId.toLowerCase().includes(orderSearchQuery.toLowerCase()) ||
-      ord.customerName.toLowerCase().includes(orderSearchQuery.toLowerCase()) ||
-      ord.phone.includes(orderSearchQuery);
-
-    const matchesStatus = orderStatusFilter === 'all' || ord.status === orderStatusFilter;
-
-    return matchesSearch && matchesStatus;
-  });
-
-  // Calculate Metrics
-  const totalRevenue = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-  const pendingOrdersCount = orders.filter((o) => o.status === 'pending').length;
-  const completedOrdersCount = orders.filter((o) => o.status === 'delivered').length;
-
-  // Render Login Page if Unauthenticated
+  // If not authenticated, show Login Screen with 3795 code prompt
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-['Anek_Bangla','Plus_Jakarta_Sans',sans-serif]">
-        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6">
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-slate-200 p-8 space-y-6">
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-rose-600 to-pink-600 flex items-center justify-center text-white mx-auto shadow-lg shadow-rose-900/30">
-              <Sparkles className="w-8 h-8 text-amber-300" />
+            <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto border border-rose-100 shadow-2xs">
+              <Lock className="w-7 h-7" />
             </div>
-            <h2 className="text-2xl font-extrabold text-white tracking-tight">
-              তনু বিউটি পার্লার - এডমিন লগইন
-            </h2>
-            <p className="text-xs text-slate-400">
-              ড্যাশবোর্ড ও অর্ডার অ্যাডমিনিস্ট্রেশনে প্রবেশ করতে সিকিউরিটি পিন/পাসওয়ার্ড প্রদান করুন
+            <h2 className="text-xl font-bold text-slate-900">এডমিন লগইন</h2>
+            <p className="text-xs text-slate-500">
+              তনু বিউটি পার্লার ও লেজার সেন্টারের নিয়ন্ত্রণ প্যানেল
             </p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700">
+                এডমিন পাসকোড লিখুন:
+              </label>
+              <input
+                type="password"
+                name="admin_secret_code"
+                autoComplete="new-password"
+                placeholder="গোপন পাসকোড লিখুন..."
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-rose-500 focus:border-rose-500 text-sm font-mono text-center tracking-widest outline-none"
+                autoFocus
+              />
+            </div>
+
             {loginError && (
-              <div className="p-3 rounded-xl bg-red-950/60 border border-red-800/80 text-red-200 text-xs font-semibold flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0 text-red-400" />
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{loginError}</span>
               </div>
             )}
 
-            <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                এডমিন পাসওয়ার্ড
-              </label>
-              <input
-                type="password"
-                required
-                placeholder="পাসওয়ার্ড লিখুন (ডিফল্ট: 1234)"
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-950 border border-slate-800 text-white text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all placeholder:text-slate-600"
-              />
-            </div>
-
             <button
               type="submit"
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-extrabold text-sm shadow-xl transition-all cursor-pointer"
+              className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm rounded-xl transition-colors cursor-pointer shadow-xs"
             >
-              ড্যাশবোর্ডে প্রবেশ করুন
+              লগইন করুন
             </button>
           </form>
 
-          <div className="pt-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500">
+          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
             <button
               onClick={onBackToWebsite}
-              className="text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1 cursor-pointer"
+              className="text-slate-600 hover:text-slate-900 font-semibold flex items-center gap-1 cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>ওয়েবসাইটে ফিরে যান</span>
+              <span>ওয়েবসাইটে ফিরুন</span>
             </button>
-            <span className="text-[11px] font-mono">PIN: 1234</span>
           </div>
         </div>
       </div>
     );
   }
 
-  // Render Full Page Professional Admin Dashboard
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-['Anek_Bangla','Plus_Jakarta_Sans',sans-serif]">
+    <div className="min-h-screen bg-slate-100 flex flex-col font-['Anek_Bangla',sans-serif] antialiased">
       
-      {/* Top Navigation Bar */}
-      <header className="bg-slate-950 border-b border-slate-800 sticky top-0 z-40 px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-600 to-pink-600 flex items-center justify-center text-white font-black text-lg shadow-md">
-            তনু
-          </div>
-          <div>
-            <h1 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2 leading-tight">
-              <span>তনু বিউটি পার্লার এন্ড লেজার সেন্টার</span>
-              <span className="text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded-md font-bold">
-                CSA শাখা
+      {/* Top Admin Header */}
+      <header className="bg-slate-900 text-white px-3.5 sm:px-6 py-3 sticky top-0 z-30 shadow-md">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-rose-600 flex items-center justify-center font-bold text-sm text-white shrink-0 shadow-xs">
+              তনু
+            </div>
+            <div className="min-w-0">
+              <h1 className="font-bold text-xs sm:text-base leading-tight truncate">
+                তনু বিউটি পার্লার ও লেজার এডমিন
+              </h1>
+              <span className="text-[10px] text-rose-400 font-medium hidden sm:block truncate">
+                সিএসএ লেজার ম্যানেজমেন্ট ও বিলিং সিস্টেম
               </span>
-            </h1>
-            <p className="text-[11px] text-slate-400 hidden sm:block">
-              অ্যাডমিন ম্যানেজমেন্ট কন্ট্রোল ড্যাশবোর্ড (টাঙ্গাইল, দেলদুয়ার)
-            </p>
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBackToWebsite}
-            className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer border border-white/10"
-          >
-            <ExternalLink className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">মূল ওয়েবসাইটে ফিরে যান</span>
-            <span className="sm:hidden">ওয়েবসাইট</span>
-          </button>
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            <button
+              onClick={onBackToWebsite}
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-700"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">ওয়েবসাইট দেখুন</span>
+            </button>
 
-          <button
-            onClick={handleLogout}
-            className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-red-950/50 hover:bg-red-900/60 text-red-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer border border-red-800/40"
-            title="লগআউট করুন"
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="hidden sm:inline">লগআউট</span>
-          </button>
+            <button
+              onClick={handleLogout}
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-rose-500/30"
+              title="লগআউট"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">লগআউট</span>
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Main Dashboard Layout (Sidebar + Content) */}
-      <div className="flex-1 flex flex-col md:flex-row">
-        
-        {/* Left Sidebar Navigation */}
-        <aside className="w-full md:w-64 bg-slate-950/60 border-b md:border-b-0 md:border-r border-slate-800 shrink-0 p-3 sm:p-4 space-y-2">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 px-3 py-1 hidden md:block">
-            মেনু নেভিগেশন
-          </div>
-
-          <nav className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-1 md:pb-0 no-scrollbar">
-            <button
-              onClick={() => setActiveTab('overview')}
-              className={`w-full px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer shrink-0 ${
-                activeTab === 'overview'
-                  ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-lg'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span>ড্যাশবোর্ড ওভারভিউ</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('orders')}
-              className={`w-full px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer shrink-0 ${
-                activeTab === 'orders'
-                  ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-lg'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <PackageCheck className="w-4 h-4" />
-                <span>অর্ডার ও বুকিং তালিকা</span>
-              </div>
-              {orders.length > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-rose-300 font-extrabold border border-rose-500/30">
-                  {orders.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('services')}
-              className={`w-full px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer shrink-0 ${
-                activeTab === 'services'
-                  ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-lg'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Tag className="w-4 h-4" />
-                <span>সার্ভিস ক্যাটালগ</span>
-              </div>
-              <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-slate-300 font-extrabold border border-slate-700">
-                {products.length}
-              </span>
-            </button>
-
-            <button
-              onClick={startAddProduct}
-              className={`w-full px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer shrink-0 ${
-                activeTab === 'add_edit_service'
-                  ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-lg'
-                  : 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/30'
-              }`}
-            >
-              <Plus className="w-4 h-4" />
-              <span>নতুন সার্ভিস যোগ করুন</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`w-full px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer shrink-0 ${
-                activeTab === 'settings'
-                  ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-lg'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <Sliders className="w-4 h-4" />
-              <span>পার্লার তথ্য ও হটলাইন</span>
-            </button>
-          </nav>
-
-          <div className="hidden md:block pt-6 border-t border-slate-800/80 p-3 space-y-2 text-[11px] text-slate-400">
-            <div className="flex items-center gap-2 text-rose-300 font-bold">
-              <Building2 className="w-4 h-4" />
-              <span>{parlourInfo.branchName}</span>
-            </div>
-            <p className="line-clamp-2 text-[10px] text-slate-500">
-              {parlourInfo.address}
-            </p>
-          </div>
-        </aside>
-
-        {/* Main Content Area */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto">
+      {/* Main Admin Sub-Navigation Tabs */}
+      <div className="bg-white border-b border-slate-200 px-3 sm:px-6 sticky top-12 sm:top-14 z-20 overflow-x-auto no-scrollbar shadow-2xs">
+        <div className="max-w-7xl mx-auto flex items-center gap-1 sm:gap-2 min-w-max">
           
-          {/* TAB 1: OVERVIEW */}
-          {activeTab === 'overview' && (
-            <div className="space-y-6">
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+              activeTab === 'overview'
+                ? 'border-rose-600 text-rose-600 bg-rose-50/50'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            <span>ড্যাশবোর্ড</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('orders')}
+            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+              activeTab === 'orders'
+                ? 'border-rose-600 text-rose-600 bg-rose-50/50'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <ClipboardList className="w-4 h-4" />
+            <span>বুকিং ও অর্ডার ({orders.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('billing')}
+            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+              activeTab === 'billing'
+                ? 'border-rose-600 text-rose-600 bg-rose-50/50'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Receipt className="w-4 h-4 text-emerald-600" />
+            <span className="font-extrabold text-emerald-700">নতুন বিলিং ও POS</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('statements')}
+            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+              activeTab === 'statements'
+                ? 'border-rose-600 text-rose-600 bg-rose-50/50'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Users className="w-4 h-4 text-blue-600" />
+            <span>কাস্টমার হিস্ট্রি</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('services')}
+            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+              activeTab === 'services'
+                ? 'border-rose-600 text-rose-600 bg-rose-50/50'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>সার্ভিস ও স্টক</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+              activeTab === 'settings'
+                ? 'border-rose-600 text-rose-600 bg-rose-50/50'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            <span>পার্লার সেটিংস</span>
+          </button>
+
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+        
+        {/* ========================================================================= */}
+        {/* TAB 1: OVERVIEW DASHBOARD */}
+        {/* ========================================================================= */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            
+            {/* Quick Metrics Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               
-              {/* Welcome Card */}
-              <div className="bg-gradient-to-r from-rose-950/80 via-slate-900 to-indigo-950 border border-rose-900/40 rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-xl">
-                <div className="relative z-10 space-y-2 max-w-2xl">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>এডমিন কন্ট্রোল সেন্টার</span>
-                  </div>
-                  <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                    স্বাগতম, তনু বিউটি পার্লার এডমিন ড্যাশবোর্ডে!
-                  </h2>
-                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                    এখানে আপনি সহজেই অনলাইনে আসা গ্রাহকদের বিউটি পার্লার ও লেজার অ্যাপয়েন্টমেন্ট প্রসেস করতে পারবেন, নতুন প্রোডাক্ট বা লেজার সার্ভিস যোগ করতে পারবেন এবং হটলাইন তথ্য পরিবর্তন করতে পারবেন।
-                  </p>
-
-                  <div className="pt-2 flex flex-wrap gap-3">
-                    <button
-                      onClick={() => setActiveTab('orders')}
-                      className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-all shadow-md cursor-pointer flex items-center gap-1.5"
-                    >
-                      <PackageCheck className="w-4 h-4" />
-                      <span>অর্ডার তালিকা দেখুন</span>
-                    </button>
-
-                    <button
-                      onClick={startAddProduct}
-                      className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-all border border-slate-700 cursor-pointer flex items-center gap-1.5"
-                    >
-                      <Plus className="w-4 h-4 text-emerald-400" />
-                      <span>নতুন সার্ভিস আপলোড</span>
-                    </button>
-                  </div>
+              <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-1">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">মোট বুকিং ও বিল</span>
+                <div className="text-2xl sm:text-3xl font-extrabold text-slate-900">
+                  {orders.length} <span className="text-xs text-slate-400 font-normal">টি</span>
                 </div>
+                <p className="text-[11px] text-emerald-600 font-medium">ফায়ারবেসে সংরক্ষিত</p>
               </div>
 
-              {/* Metric Cards Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                
-                <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-5 space-y-2">
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span className="text-xs font-bold">মোট বুকিং/অর্ডার</span>
-                    <PackageCheck className="w-4 h-4 text-rose-400" />
-                  </div>
-                  <div className="text-2xl font-extrabold text-white">
-                    {orders.length} <span className="text-xs font-medium text-slate-400">টি</span>
-                  </div>
-                  <span className="text-[11px] text-emerald-400 font-semibold block">
-                    সিস্টেমে সংরক্ষিত
-                  </span>
+              <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-1">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">মোট বিক্রয় ও আয়</span>
+                <div className="text-2xl sm:text-3xl font-extrabold text-slate-900">
+                  ৳{orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0).toLocaleString('bn-BD')}
                 </div>
-
-                <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-5 space-y-2">
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span className="text-xs font-bold">অপেক্ষমাণ (পেন্ডিং)</span>
-                    <Clock className="w-4 h-4 text-amber-400" />
-                  </div>
-                  <div className="text-2xl font-extrabold text-amber-400">
-                    {pendingOrdersCount} <span className="text-xs font-medium text-slate-400">টি</span>
-                  </div>
-                  <span className="text-[11px] text-amber-300 font-semibold block">
-                    কনফার্মেশনের অপেক্ষায়
-                  </span>
-                </div>
-
-                <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-5 space-y-2">
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span className="text-xs font-bold">সম্পন্ন (Delivered)</span>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  </div>
-                  <div className="text-2xl font-extrabold text-emerald-400">
-                    {completedOrdersCount} <span className="text-xs font-medium text-slate-400">টি</span>
-                  </div>
-                  <span className="text-[11px] text-emerald-300 font-semibold block">
-                    সফলভাবে সেবা সম্পন্ন
-                  </span>
-                </div>
-
-                <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-5 space-y-2">
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span className="text-xs font-bold">মোট বুকিং ভ্যালু</span>
-                    <BarChart3 className="w-4 h-4 text-purple-400" />
-                  </div>
-                  <div className="text-2xl font-extrabold text-rose-300">
-                    ৳{totalRevenue.toLocaleString('bn-BD')}
-                  </div>
-                  <span className="text-[11px] text-slate-400 font-medium block">
-                    অনলাইন বুকিং অ্যামাউন্ট
-                  </span>
-                </div>
-
+                <p className="text-[11px] text-slate-500">সকল বুকিং ও বিল থেকে</p>
               </div>
 
-              {/* Recent Activity Table */}
-              <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                  <h3 className="font-extrabold text-white text-sm flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-rose-500" />
-                    <span>সর্বশেষ বুকিং ও অর্ডারসমূহ</span>
-                  </h3>
-
-                  <button
-                    onClick={() => setActiveTab('orders')}
-                    className="text-xs font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>সব দেখুন ({orders.length})</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
+              <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-1">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">অপেক্ষমাণ (Pending)</span>
+                <div className="text-2xl sm:text-3xl font-extrabold text-amber-600">
+                  {orders.filter(o => o.status === 'pending').length} <span className="text-xs text-slate-400 font-normal">টি</span>
                 </div>
+                <p className="text-[11px] text-amber-700">কনফার্মেশনের অপেক্ষায়</p>
+              </div>
 
-                {orders.length === 0 ? (
-                  <div className="text-center py-8 text-slate-500 text-xs">
-                    এখনো পর্যন্ত কোনো অর্ডার বা বুকিং জমা হয়নি।
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {orders.slice(0, 5).map((ord) => (
-                      <div
-                        key={ord.orderId}
-                        className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-slate-700 transition-all text-xs shadow-sm"
-                      >
-                        <div className="space-y-2 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono font-bold text-rose-300 bg-rose-950/80 px-2.5 py-0.5 rounded-lg border border-rose-800/60">
-                              #{ord.orderId}
-                            </span>
-                            <span className="font-extrabold text-white text-sm">{ord.customerName}</span>
-                            <a
-                              href={`tel:${ord.phone}`}
-                              className="text-amber-300 font-bold hover:underline text-xs flex items-center gap-1"
-                            >
-                              <Phone className="w-3 h-3 text-emerald-400" />
-                              <span>{ord.phone}</span>
-                            </a>
-                            <span className="text-slate-400 text-[11px]">
-                              ({new Date(ord.createdAt).toLocaleDateString('bn-BD')})
-                            </span>
-                          </div>
-
-                          {/* Ordered Product Thumbnails & Titles */}
-                          <div className="flex flex-wrap items-center gap-2 pt-1">
-                            {ord.items.map((item, idx) => {
-                              const imgUrl = getItemImageUrl(item);
-                              return (
-                                <div
-                                  key={idx}
-                                  className="flex items-center gap-2 bg-slate-950/90 border border-slate-800 p-1.5 pr-3 rounded-xl max-w-xs shadow-inner"
-                                >
-                                  <img
-                                    src={imgUrl}
-                                    alt={item.productTitle}
-                                    className="w-10 h-10 object-cover rounded-lg shrink-0 border border-slate-700"
-                                    referrerPolicy="no-referrer"
-                                  />
-                                  <div className="min-w-0">
-                                    <p className="font-bold text-slate-200 text-xs line-clamp-1">
-                                      {item.productTitle}
-                                    </p>
-                                    <p className="text-[10px] text-slate-400">
-                                      পরিমাণ: <span className="text-amber-300 font-bold">x{item.quantity}</span>
-                                    </p>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between md:justify-end gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-800/80">
-                          <div className="text-left md:text-right">
-                            <span className="text-[10px] text-slate-400 block font-medium">মোট পেমেন্ট</span>
-                            <span className="font-extrabold text-amber-300 text-base">
-                              ৳{ord.totalAmount.toLocaleString('bn-BD')}
-                            </span>
-                          </div>
-
-                          <span
-                            className={`px-3 py-1.5 rounded-xl text-[10px] font-extrabold ${
-                              ord.status === 'delivered'
-                                ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                                : ord.status === 'confirmed'
-                                ? 'bg-blue-950 text-blue-300 border border-blue-800'
-                                : 'bg-amber-950 text-amber-300 border border-amber-800'
-                            }`}
-                          >
-                            {ord.status === 'delivered'
-                              ? 'সম্পন্ন'
-                              : ord.status === 'confirmed'
-                              ? 'কনফার্মড'
-                              : 'পেন্ডিং'}
-                          </span>
-
-                          <button
-                            onClick={() => setSelectedOrderDetails(ord)}
-                            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors cursor-pointer border border-slate-700"
-                            title="বিস্তারিত দেখুন"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-1">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">সম্পন্ন সার্ভিস</span>
+                <div className="text-2xl sm:text-3xl font-extrabold text-emerald-700">
+                  {orders.filter(o => o.status === 'delivered' || o.status === 'confirmed').length} <span className="text-xs text-slate-400 font-normal">টি</span>
+                </div>
+                <p className="text-[11px] text-emerald-700">সফল গ্রাহক সেবা</p>
               </div>
 
             </div>
-          )}
 
-          {/* TAB 2: ORDERS & APPOINTMENTS LIST */}
-          {activeTab === 'orders' && (
-            <div className="space-y-5">
-              
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950 border border-slate-800 p-4 rounded-3xl">
-                <div>
-                  <h3 className="font-extrabold text-white text-base">
-                    গ্রাহকের অনলাইন অ্যাপয়েন্টমেন্ট ও অর্ডার তালিকা
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    মোট {orders.length} টি অর্ডার ডাটাবেজে রয়েছে
-                  </p>
-                </div>
+            {/* Quick Actions Bar */}
+            <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 text-white flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="space-y-1 text-center sm:text-left">
+                <h3 className="font-bold text-base text-white">নতুন কাস্টমারের বিল তৈরি করতে চান?</h3>
+                <p className="text-xs text-slate-300">
+                  সরাসরি কাস্টমারের ফোন নম্বর লিখে ম্যানুয়াল বিলিং ও A4 ইনভয়েস প্রিন্ট করুন।
+                </p>
+              </div>
 
+              <button
+                onClick={() => setActiveTab('billing')}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl flex items-center gap-2 transition-colors cursor-pointer shrink-0 shadow-xs"
+              >
+                <Receipt className="w-4 h-4" />
+                <span>নতুন বিলিং শুরু করুন</span>
+              </button>
+            </div>
+
+            {/* Recent Bookings Table */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-sm text-slate-900">সাম্প্রতিক ৫টি বুকিং ও বিল</h3>
                 <button
-                  onClick={fetchOrders}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0 border border-slate-700"
+                  onClick={() => setActiveTab('orders')}
+                  className="text-xs font-semibold text-rose-600 hover:underline"
                 >
-                  <RefreshCw className="w-3.5 h-3.5 text-rose-400" />
-                  <span>ডাটা রিফ্রেশ করুন</span>
+                  সবগুলো দেখুন →
                 </button>
               </div>
 
-              {/* Search & Status Filter */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="relative w-full sm:w-80">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input
-                    type="text"
-                    placeholder="অর্ডার আইডি, গ্রাহকের নাম বা মোবাইল নম্বর..."
-                    value={orderSearchQuery}
-                    onChange={(e) => setOrderSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                    <tr>
+                      <th className="py-2.5 px-3">আইডি</th>
+                      <th className="py-2.5 px-3">গ্রাহক</th>
+                      <th className="py-2.5 px-3">সার্ভিস</th>
+                      <th className="py-2.5 px-3 text-right">টাকা</th>
+                      <th className="py-2.5 px-3 text-center">স্ট্যাটাস</th>
+                      <th className="py-2.5 px-3 text-right">অ্যাকশন</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {orders.slice(0, 5).map(o => (
+                      <tr key={o.orderId} className="hover:bg-slate-50/50">
+                        <td className="py-2.5 px-3 font-mono font-bold text-slate-900">{o.orderId}</td>
+                        <td className="py-2.5 px-3 font-medium text-slate-800">{o.customerName} ({o.phone})</td>
+                        <td className="py-2.5 px-3 text-slate-600 truncate max-w-xs">{o.items.map(i => i.productTitle).join(', ')}</td>
+                        <td className="py-2.5 px-3 text-right font-bold text-slate-900">৳{o.totalAmount.toLocaleString('bn-BD')}</td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            o.status === 'delivered' ? 'bg-emerald-100 text-emerald-800' :
+                            o.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                            'bg-amber-100 text-amber-800'
+                          }`}>
+                            {o.status === 'delivered' ? 'সম্পন্ন' : o.status === 'confirmed' ? 'গৃহীত' : 'পেন্ডিং'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <button
+                            onClick={() => setPrintInvoiceOrder(o)}
+                            className="p-1.5 text-slate-600 hover:text-rose-600 transition-colors cursor-pointer"
+                            title="A4 ইনভয়েস প্রিন্ট"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <Filter className="w-4 h-4 text-slate-500 shrink-0" />
-                  <select
-                    value={orderStatusFilter}
-                    onChange={(e) => setOrderStatusFilter(e.target.value)}
-                    className="px-3.5 py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer"
-                  >
-                    <option value="all">সকল স্ট্যাটাস (All)</option>
-                    <option value="pending">⏳ পেন্ডিং (Pending)</option>
-                    <option value="confirmed">✅ কনফার্মড (Confirmed)</option>
-                    <option value="processing">⚙️ প্রসেসিং (Processing)</option>
-                    <option value="delivered">🎉 সম্পন্ন (Delivered)</option>
-                  </select>
-                </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 2: ORDERS & BOOKINGS LIST */}
+        {/* ========================================================================= */}
+        {activeTab === 'orders' && (
+          <div className="space-y-4">
+            
+            {/* Filter & Search Bar */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="relative flex-1 w-full">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="মোবাইল নম্বর, নাম বা আইডি দিয়ে খুঁজুন..."
+                  value={orderSearchQuery}
+                  onChange={(e) => setOrderSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-rose-500 focus:bg-white"
+                />
               </div>
 
-              {/* Orders List */}
-              {isLoadingOrders ? (
-                <div className="text-center py-16 text-slate-500 text-xs">
-                  <RefreshCw className="w-6 h-6 animate-spin mx-auto text-rose-500 mb-2" />
-                  <span>অর্ডার ডাটা লোড হচ্ছে...</span>
-                </div>
-              ) : filteredOrders.length === 0 ? (
-                <div className="text-center py-16 bg-slate-950 border border-dashed border-slate-800 rounded-3xl p-6">
-                  <PackageCheck className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                  <h4 className="font-extrabold text-white text-sm">কোনো অর্ডার পাওয়া যায়নি</h4>
-                  <p className="text-xs text-slate-500 mt-1">
-                    ফিল্টার পরিবর্তন করে খুঁজুন অথবা নতুন অর্ডারের জন্য অপেক্ষা করুন।
-                  </p>
+              {/* Status Filter */}
+              <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto no-scrollbar">
+                {['all', 'pending', 'confirmed', 'delivered'].map((st) => (
+                  <button
+                    key={st}
+                    onClick={() => setOrderStatusFilter(st)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition-colors cursor-pointer border ${
+                      orderStatusFilter === st
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    {st === 'all' ? 'সবগুলো' : st === 'pending' ? 'পেন্ডিং' : st === 'confirmed' ? 'গৃহীত' : 'সম্পন্ন'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Orders Feed / Table */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <div className="p-4 border-b border-slate-200 flex items-center justify-between text-xs text-slate-500">
+                <span>মোট প্রাপ্ত বুকিং: <b>{filteredOrders.length}</b> টি</span>
+                <span className="text-emerald-700 font-medium">ফায়ারবেসে লাইভ কানেক্টেড</span>
+              </div>
+
+              {filteredOrders.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 text-xs">
+                  কোনো বুকিং বা অর্ডার পাওয়া যায়নি।
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {filteredOrders.map((ord) => (
-                    <div
-                      key={ord.orderId}
-                      className="bg-slate-950 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3 hover:border-slate-700 transition-all shadow-md"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-                        <div className="flex items-center gap-2.5 flex-wrap">
-                          <span className="font-mono font-extrabold text-rose-300 text-sm bg-rose-950/80 px-3 py-1 rounded-xl border border-rose-800/60">
-                            #{ord.orderId}
-                          </span>
-                          <span className="text-sm font-extrabold text-white">{ord.customerName}</span>
-                          <span className="text-xs text-slate-400">
-                            ({new Date(ord.createdAt).toLocaleDateString('bn-BD')})
-                          </span>
-                        </div>
+                <>
+                  {/* Mobile Cards Feed for Mobile Screens */}
+                  <div className="block sm:hidden divide-y divide-slate-100">
+                    {filteredOrders.map(o => (
+                      <div key={o.orderId} className="p-4 space-y-3 hover:bg-slate-50/70 transition-colors">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-bold text-slate-900 text-xs">{o.orderId}</span>
+                              {o.orderType === 'manual_bill' && (
+                                <span className="text-[9px] bg-slate-100 text-slate-700 font-semibold px-1.5 py-0.2 rounded">
+                                  ম্যানুয়াল বিল
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-slate-400">
+                              {new Date(o.createdAt).toLocaleDateString('bn-BD', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
 
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={ord.status}
-                            onChange={(e) =>
-                              handleStatusChange(ord.orderId, e.target.value as Order['status'])
-                            }
-                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold cursor-pointer border ${
-                              ord.status === 'delivered'
-                                ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
-                                : ord.status === 'confirmed'
-                                ? 'bg-blue-950 text-blue-300 border-blue-800'
-                                : 'bg-amber-950 text-amber-300 border-amber-800'
-                            }`}
-                          >
-                            <option value="pending">⏳ পেন্ডিং (Pending)</option>
-                            <option value="confirmed">✅ কনফার্মড (Confirmed)</option>
-                            <option value="processing">⚙️ প্রসেসিং (Processing)</option>
-                            <option value="delivered">🎉 সম্পন্ন (Delivered)</option>
-                          </select>
-
-                          <button
-                            onClick={() => setSelectedOrderDetails(ord)}
-                            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-                            title="বিস্তারিত দেখুন"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-
-                          <button
-                            onClick={() => handleDeleteOrder(ord.orderId)}
-                            className="p-2 rounded-xl bg-red-950/60 hover:bg-red-900/80 text-red-400 transition-colors cursor-pointer border border-red-800/50"
-                            title="মুছে ফেলুন"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                        <div>
-                          <span className="text-slate-500 font-medium block">যোগাযোগ & সময়সূচি:</span>
-                          <a
-                            href={`tel:${ord.phone}`}
-                            className="font-extrabold text-amber-300 hover:underline flex items-center gap-1.5 mt-0.5"
-                          >
-                            <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>{ord.phone}</span>
-                          </a>
-                          <span className="text-slate-300 block mt-1 line-clamp-2 leading-relaxed">
-                            {ord.address}
-                          </span>
-                        </div>
-
-                        <div>
-                          <span className="text-slate-500 font-medium block mb-1.5">বুককৃত সার্ভিসসমূহ (ছবি সহ):</span>
-                          <div className="space-y-1.5">
-                            {ord.items.map((it, idx) => {
-                              const imgUrl = getItemImageUrl(it);
-                              return (
-                                <div
-                                  key={idx}
-                                  className="flex items-center gap-2.5 bg-slate-900/90 border border-slate-800 p-1.5 rounded-xl"
-                                >
-                                  <img
-                                    src={imgUrl}
-                                    alt={it.productTitle}
-                                    className="w-11 h-11 object-cover rounded-lg shrink-0 border border-slate-700"
-                                    referrerPolicy="no-referrer"
-                                  />
-                                  <div className="min-w-0 flex-1">
-                                    <span className="font-bold text-white text-xs block line-clamp-1">
-                                      {it.productTitle}
-                                    </span>
-                                    <span className="text-[11px] text-slate-400">
-                                      পরিমাণ: <span className="text-amber-300 font-bold">x{it.quantity}</span> | মূল্য: ৳{(it.price * it.quantity).toLocaleString('bn-BD')}
-                                    </span>
-                                  </div>
-                                </div>
-                              );
-                            })}
+                          <div className="text-right">
+                            <span className="text-sm font-extrabold text-slate-900 block">৳{o.totalAmount.toLocaleString('bn-BD')}</span>
+                            <span className="text-[10px] text-slate-500">
+                              {o.paymentMethod === 'cod' ? 'ক্যাশ অন ডেলিভারি' : o.paymentMethod}
+                            </span>
                           </div>
                         </div>
 
-                        <div className="sm:text-right">
-                          <span className="text-slate-500 font-medium block">মোট পেমেন্ট:</span>
-                          <span className="text-base font-extrabold text-rose-300 block mt-0.5">
-                            ৳{ord.totalAmount.toLocaleString('bn-BD')}
-                          </span>
-                          <span className="text-[11px] text-emerald-400 font-semibold block mt-0.5">
-                            ক্যাশ অন ডেলিভারি / পার্লার পেমেন্ট
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: SERVICES MANAGEMENT */}
-          {activeTab === 'services' && (
-            <div className="space-y-5">
-              
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950 border border-slate-800 p-4 rounded-3xl">
-                <div>
-                  <h3 className="font-extrabold text-white text-base">
-                    পার্লার সার্ভিস ও লেজার ক্যাটালগ
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    ওয়েবসাইটে প্রদর্শিত সকল সার্ভিস ও লেজার প্যাকেজ ম্যানেজ করুন
-                  </p>
-                </div>
-
-                <button
-                  onClick={startAddProduct}
-                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer shrink-0"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>নতুন সার্ভিস যোগ করুন</span>
-                </button>
-              </div>
-
-              {/* Products Cards Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {products.map((prod) => (
-                  <div
-                    key={prod.id}
-                    className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3 flex flex-col justify-between hover:border-rose-900/60 transition-all shadow-md"
-                  >
-                    <div className="space-y-2">
-                      <div className="aspect-16/9 rounded-xl overflow-hidden bg-slate-900 relative">
-                        <img
-                          src={prod.images[0]}
-                          alt={prod.titleBn}
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
-                        />
-                        <span className="absolute top-2 left-2 bg-rose-600 text-white font-bold text-[10px] px-2 py-0.5 rounded-md shadow-md">
-                          {prod.categoryBn}
-                        </span>
-                        {prod.isFeatured && (
-                          <span className="absolute top-2 right-2 bg-amber-500 text-slate-950 font-bold text-[10px] px-2 py-0.5 rounded-md shadow-md">
-                            Featured
-                          </span>
-                        )}
-                      </div>
-
-                      <div>
-                        <h4 className="font-extrabold text-white text-sm line-clamp-1">
-                          {prod.titleBn}
-                        </h4>
-                        <p className="text-[11px] text-slate-400 line-clamp-2 mt-0.5 leading-relaxed">
-                          {prod.descriptionBn}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="pt-3 border-t border-slate-800 space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-base font-extrabold text-rose-300">
-                            ৳{prod.price.toLocaleString('bn-BD')}
-                          </span>
-                          {prod.originalPrice > prod.price && (
-                            <span className="text-xs text-slate-500 line-through ml-2">
-                              ৳{prod.originalPrice}
-                            </span>
+                        {/* Customer details */}
+                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-900 text-xs">{o.customerName}</span>
+                            <a
+                              href={`tel:${o.phone}`}
+                              className="inline-flex items-center gap-1 text-xs font-mono font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200"
+                            >
+                              <Phone className="w-3 h-3 text-rose-600" />
+                              <span>{o.phone}</span>
+                            </a>
+                          </div>
+                          {o.address && (
+                            <p className="text-[11px] text-slate-600 truncate">{o.address}</p>
                           )}
                         </div>
 
-                        {/* Stock status badge */}
-                        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold flex items-center gap-1 border ${
-                          (prod.stockCount || 0) > 10
-                            ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800'
-                            : (prod.stockCount || 0) > 0
-                            ? 'bg-amber-950/80 text-amber-300 border-amber-800'
-                            : 'bg-red-950/80 text-red-300 border-red-800'
-                        }`}>
-                          <Boxes className="w-3 h-3" />
-                          <span>স্টক: {prod.stockCount || 0} টি</span>
-                        </span>
-                      </div>
+                        {/* Items */}
+                        <div className="space-y-1 text-xs text-slate-700">
+                          {o.items.map((it, idx) => (
+                            <div key={idx} className="flex justify-between items-center text-[11px]">
+                              <span className="truncate pr-2">• {it.productTitle}</span>
+                              <span className="font-semibold text-slate-500 shrink-0">x{it.quantity} (৳{(it.price * it.quantity).toLocaleString('bn-BD')})</span>
+                            </div>
+                          ))}
+                        </div>
 
-                      <div className="flex items-center justify-between gap-1.5">
-                        <button
-                          onClick={() => {
-                            setRestockProduct(prod);
-                            setAddStockQty(10);
-                          }}
-                          className="px-2.5 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-[11px] font-bold border border-emerald-800 flex items-center gap-1 transition-colors cursor-pointer"
-                          title="নতুন স্টক যোগ করুন"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>স্টক যোগ</span>
-                        </button>
+                        {/* Status Select & Actions */}
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                          <div className="flex-1">
+                            <select
+                              value={o.status}
+                              onChange={(e) => handleStatusChange(o.orderId, e.target.value as Order['status'])}
+                              className={`w-full text-[11px] font-bold py-1.5 px-2 rounded-lg border outline-none cursor-pointer ${
+                                o.status === 'delivered' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' :
+                                o.status === 'confirmed' ? 'bg-blue-50 text-blue-800 border-blue-300' :
+                                'bg-amber-50 text-amber-800 border-amber-300'
+                              }`}
+                            >
+                              <option value="pending">অপেক্ষমাণ (পেন্ডিং)</option>
+                              <option value="confirmed">গৃহীত ও নিশ্চিত</option>
+                              <option value="processing">প্রক্রিয়াধীন</option>
+                              <option value="delivered">সম্পন্ন / ডেলিভার্ড</option>
+                            </select>
+                          </div>
 
-                        <div className="flex items-center gap-1.5">
                           <button
-                            onClick={() => startEditProduct(prod)}
-                            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer border border-slate-700"
+                            onClick={() => setPrintInvoiceOrder(o)}
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-[11px] inline-flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                            title="A4 ইনভয়েস প্রিন্ট"
                           >
-                            <Edit className="w-3.5 h-3.5 text-amber-400" />
-                            <span>এডিট</span>
+                            <Printer className="w-3.5 h-3.5" />
+                            <span>ইনভয়েস</span>
                           </button>
 
                           <button
-                            onClick={() => handleDeleteProduct(prod.id, prod.titleBn)}
-                            className="p-1.5 rounded-xl bg-red-950/60 hover:bg-red-900/80 text-red-400 text-xs font-bold transition-colors cursor-pointer border border-red-800/50"
-                            title="মুছে ফেলুন"
+                            onClick={() => handleDeleteOrder(o.orderId)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer border border-slate-200"
+                            title="ডিলিট"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop Table View */}
+                  <div className="hidden sm:block overflow-x-auto">
+                    <table className="w-full text-left text-xs min-w-[640px]">
+                      <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                        <tr>
+                          <th className="py-3 px-3.5">তারিখ ও আইডি</th>
+                          <th className="py-3 px-3.5">গ্রাহক বিবরণ</th>
+                          <th className="py-3 px-3.5">সার্ভিস ও আইটেম</th>
+                          <th className="py-3 px-3.5 text-right">মোট বিল</th>
+                          <th className="py-3 px-3.5 text-center">স্ট্যাটাস পরিবর্তন</th>
+                          <th className="py-3 px-3.5 text-right">অ্যাকশন</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredOrders.map(o => (
+                          <tr key={o.orderId} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="py-3 px-3.5 space-y-0.5">
+                              <span className="font-mono font-bold text-slate-900 block">{o.orderId}</span>
+                              <span className="text-[10px] text-slate-400">
+                                {new Date(o.createdAt).toLocaleDateString('bn-BD', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                              {o.orderType === 'manual_bill' && (
+                                <span className="inline-block text-[9px] bg-slate-100 text-slate-700 font-semibold px-1.5 py-0.5 rounded">
+                                  ম্যানুয়াল বিল
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-3.5 space-y-0.5">
+                              <span className="font-bold text-slate-900 block">{o.customerName}</span>
+                              <a href={`tel:${o.phone}`} className="text-slate-600 hover:text-rose-600 font-mono block">
+                                {o.phone}
+                              </a>
+                              <span className="text-[10px] text-slate-400 block truncate max-w-xs">{o.address}</span>
+                            </td>
+
+                            <td className="py-3 px-3.5 space-y-1">
+                              {o.items.map((it, idx) => (
+                                <div key={idx} className="text-slate-700">
+                                  <span>• {it.productTitle}</span>
+                                  <span className="text-slate-400 text-[10px] ml-1">x{it.quantity}</span>
+                                </div>
+                              ))}
+                            </td>
+
+                            <td className="py-3 px-3.5 text-right font-extrabold text-slate-900">
+                              <div>৳{o.totalAmount.toLocaleString('bn-BD')}</div>
+                              <div className="text-[10px] text-slate-400 font-normal">
+                                {o.paymentMethod === 'cod' ? 'ক্যাশ অন ডেলিভারি' : o.paymentMethod}
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-3.5 text-center">
+                              <select
+                                value={o.status}
+                                onChange={(e) => handleStatusChange(o.orderId, e.target.value as Order['status'])}
+                                className={`text-[11px] font-bold py-1 px-2.5 rounded-lg border outline-none cursor-pointer ${
+                                  o.status === 'delivered' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' :
+                                  o.status === 'confirmed' ? 'bg-blue-50 text-blue-800 border-blue-300' :
+                                  'bg-amber-50 text-amber-800 border-amber-300'
+                                }`}
+                              >
+                                <option value="pending">অপেক্ষমাণ (পেন্ডিং)</option>
+                                <option value="confirmed">গৃহীত ও নিশ্চিত</option>
+                                <option value="processing">প্রক্রিয়াধীন</option>
+                                <option value="delivered">সম্পন্ন / ডেলিভার্ড</option>
+                              </select>
+                            </td>
+
+                            <td className="py-3 px-3.5 text-right space-x-1">
+                              <button
+                                onClick={() => setPrintInvoiceOrder(o)}
+                                className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-600 font-semibold text-[11px] inline-flex items-center gap-1 transition-colors cursor-pointer border border-slate-200"
+                                title="A4 সাইজ ইনভয়েস প্রিন্ট"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                                <span>ইনভয়েস</span>
+                              </button>
+
+                              <button
+                                onClick={() => handleDeleteOrder(o.orderId)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                title="ডিলিট করুন"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 3: MANUAL BILLING & POS SYSTEM */}
+        {/* ========================================================================= */}
+        {activeTab === 'billing' && (
+          <div className="space-y-6">
+            
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6">
+              
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="space-y-0.5">
+                  <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <Receipt className="w-5 h-5 text-emerald-600" />
+                    <span>ম্যানুয়াল বিলিং ও A4 ইনভয়েস জেনারেটর</span>
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    ফোন নম্বর টাইপ করলেই পূর্বের কাস্টমার রেকর্ড স্বয়ংক্রিয়ভাবে চলে আসবে।
+                  </p>
+                </div>
+
+                <span className="text-xs font-semibold px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg">
+                  রিয়েল-টাইম ফায়ারবেস সিঙ্ক
+                </span>
+              </div>
+
+              <form onSubmit={handleSaveManualBill} className="space-y-6">
+                
+                {/* Customer Details Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  
+                  {/* Phone with Auto-search */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-800">
+                      কাস্টমার মোবাইল নম্বর <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="01XXXXXXXXX"
+                      value={billCustomerPhone}
+                      onChange={(e) => setBillCustomerPhone(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                      required
+                    />
+                    {matchedCustomerInfo && (
+                      <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-800 flex items-center gap-1.5 animate-in fade-in">
+                        <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>
+                          <b>পূর্বের কাস্টমার!</b> ({matchedCustomerInfo.count}টি সার্ভিস নিয়েছেন, মোট: ৳{matchedCustomerInfo.totalSpent.toLocaleString('bn-BD')})
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Name */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-800">
+                      কাস্টমারের নাম <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="যেমন: মোসাঃ সুমি আক্তার"
+                      value={billCustomerName}
+                      onChange={(e) => setBillCustomerName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                      required
+                    />
+                  </div>
+
+                  {/* Address */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-800">
+                      ঠিকানা / এলাকা
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="নাটিয়াপাড়া, দেলদুয়ার"
+                      value={billCustomerAddress}
+                      onChange={(e) => setBillCustomerAddress(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                </div>
+
+                {/* Items Selection */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800">
+                      সার্ভিস ও পণ্যের তালিকা:
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddBillItem}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg flex items-center gap-1 transition-colors cursor-pointer border border-slate-200"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>সার্ভিস যোগ করুন</span>
+                    </button>
+                  </div>
+
+                  {/* Mobile Item Cards View (Screen < 640px) */}
+                  <div className="block sm:hidden space-y-3">
+                    {billItems.map((item, index) => (
+                      <div key={index} className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-600">আইটেম #{index + 1}</span>
+                          <button
+                            type="button"
+                            disabled={billItems.length <= 1}
+                            onClick={() => handleRemoveBillItem(index)}
+                            className="text-slate-400 hover:text-rose-600 disabled:opacity-30 p-1 cursor-pointer"
+                            title="মুছুন"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {/* Preset Dropdown */}
+                        <div>
+                          <select
+                            onChange={(e) => handleSelectProductForBill(index, e.target.value)}
+                            className="w-full py-2 px-2.5 bg-white border border-slate-200 rounded-lg text-xs outline-none"
+                          >
+                            <option value="">-- সার্ভিস ড্রপডাউন নির্বাচন --</option>
+                            {products.map(p => (
+                              <option key={p.id} value={p.id}>{p.titleBn} (৳{p.price})</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Custom Title */}
+                        <div>
+                          <input
+                            type="text"
+                            value={item.productTitle}
+                            onChange={(e) => handleBillItemChange(index, 'productTitle', e.target.value)}
+                            placeholder="সার্ভিস বা পণ্যের নাম..."
+                            className="w-full py-2 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold outline-none"
+                            required
+                          />
+                        </div>
+
+                        {/* Price, Quantity, Subtotal in Grid */}
+                        <div className="grid grid-cols-3 gap-2 pt-1">
+                          <div>
+                            <label className="text-[10px] text-slate-500 block mb-0.5">একক রেট (৳)</label>
+                            <input
+                              type="number"
+                              value={item.price}
+                              onChange={(e) => handleBillItemChange(index, 'price', Number(e.target.value))}
+                              className="w-full py-1.5 px-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-right outline-none"
+                              min={0}
+                              required
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] text-slate-500 block mb-0.5 text-center">পরিমাণ</label>
+                            <input
+                              type="number"
+                              value={item.quantity}
+                              onChange={(e) => handleBillItemChange(index, 'quantity', Math.max(1, Number(e.target.value)))}
+                              className="w-full py-1.5 px-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center outline-none"
+                              min={1}
+                              required
+                            />
+                          </div>
+
+                          <div className="text-right">
+                            <label className="text-[10px] text-slate-500 block mb-0.5">মোট টাকা</label>
+                            <div className="py-1.5 px-2 bg-white border border-slate-200 rounded-lg text-xs font-extrabold text-slate-900 truncate">
+                              ৳{(item.price * item.quantity).toLocaleString('bn-BD')}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop Items Table View (Screen >= 640px) */}
+                  <div className="hidden sm:block border border-slate-200 rounded-xl overflow-x-auto">
+                    <table className="w-full text-left text-xs min-w-[560px]">
+                      <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                        <tr>
+                          <th className="py-2.5 px-3">সার্ভিস / আইটেম নির্বাচন</th>
+                          <th className="py-2.5 px-3">সার্ভিসের নাম (ম্যানুয়াল পরিবর্তনযোগ্য)</th>
+                          <th className="py-2.5 px-3 w-28 text-right">একক রেট (৳)</th>
+                          <th className="py-2.5 px-3 w-20 text-center">পরিমাণ</th>
+                          <th className="py-2.5 px-3 w-28 text-right">মোট (৳)</th>
+                          <th className="py-2.5 px-3 w-10 text-center">মুছুন</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {billItems.map((item, index) => (
+                          <tr key={index}>
+                            {/* Preset Dropdown */}
+                            <td className="py-2 px-3">
+                              <select
+                                onChange={(e) => handleSelectProductForBill(index, e.target.value)}
+                                className="w-full py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none"
+                              >
+                                <option value="">-- সার্ভিস ড্রপডাউন --</option>
+                                {products.map(p => (
+                                  <option key={p.id} value={p.id}>{p.titleBn} (৳{p.price})</option>
+                                ))}
+                              </select>
+                            </td>
+
+                            {/* Title */}
+                            <td className="py-2 px-3">
+                              <input
+                                type="text"
+                                value={item.productTitle}
+                                onChange={(e) => handleBillItemChange(index, 'productTitle', e.target.value)}
+                                placeholder="সার্ভিস বা পণ্যের নাম..."
+                                className="w-full py-1.5 px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold outline-none"
+                                required
+                              />
+                            </td>
+
+                            {/* Price */}
+                            <td className="py-2 px-3 text-right">
+                              <input
+                                type="number"
+                                value={item.price}
+                                onChange={(e) => handleBillItemChange(index, 'price', Number(e.target.value))}
+                                className="w-full py-1.5 px-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-right outline-none"
+                                min={0}
+                                required
+                              />
+                            </td>
+
+                            {/* Quantity */}
+                            <td className="py-2 px-3 text-center">
+                              <input
+                                type="number"
+                                value={item.quantity}
+                                onChange={(e) => handleBillItemChange(index, 'quantity', Math.max(1, Number(e.target.value)))}
+                                className="w-16 py-1.5 px-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center outline-none mx-auto"
+                                min={1}
+                                required
+                              />
+                            </td>
+
+                            {/* Subtotal */}
+                            <td className="py-2 px-3 text-right font-extrabold text-slate-900">
+                              ৳{(item.price * item.quantity).toLocaleString('bn-BD')}
+                            </td>
+
+                            {/* Delete */}
+                            <td className="py-2 px-3 text-center">
+                              <button
+                                type="button"
+                                disabled={billItems.length <= 1}
+                                onClick={() => handleRemoveBillItem(index)}
+                                className="text-slate-400 hover:text-rose-600 disabled:opacity-30 cursor-pointer p-1"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Calculation, Discount, Payment Method */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6 bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                  
+                  {/* Left: Payment Method & Notes */}
+                  <div className="md:col-span-6 space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-800">পেমেন্ট মাধ্যম:</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: 'cash', label: 'ক্যাশ (Cash)' },
+                          { id: 'bkash', label: 'বিকাশ (bKash)' },
+                          { id: 'nagad', label: 'নগদ (Nagad)' },
+                        ].map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setBillPaymentMethod(m.id as any)}
+                            className={`py-2 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer text-center ${
+                              billPaymentMethod === m.id
+                                ? 'bg-slate-900 text-white border-slate-900'
+                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-800">অতিরিক্ত নোট / মন্তব্য (ঐচ্ছিক):</label>
+                      <input
+                        type="text"
+                        placeholder="যেমন: ৩য় সেশন সম্পন্ন, বিশেষ ছাড় দেওয়া হয়েছে"
+                        value={billNotes}
+                        onChange={(e) => setBillNotes(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Right: Calculations */}
+                  <div className="md:col-span-6 space-y-2 text-xs">
+                    <div className="flex justify-between text-slate-600">
+                      <span>সাবটোটাল:</span>
+                      <span className="font-bold text-slate-900">৳{billSubtotal.toLocaleString('bn-BD')}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-600">বিশেষ ছাড় (Discount ৳):</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={billDiscount}
+                        onChange={(e) => setBillDiscount(Number(e.target.value))}
+                        className="w-28 px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-right font-bold text-rose-700 outline-none"
+                      />
+                    </div>
+
+                    <div className="flex justify-between border-t border-slate-200 pt-2 text-sm font-extrabold text-slate-900">
+                      <span>সর্বমোট প্রদেয় বিল:</span>
+                      <span>৳{billGrandTotal.toLocaleString('bn-BD')}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4 pt-1">
+                      <span className="text-emerald-800 font-semibold">জমা / পেইড টাকা (Paid ৳):</span>
+                      <input
+                        type="number"
+                        placeholder={billGrandTotal.toString()}
+                        value={billPaidAmount}
+                        onChange={(e) => setBillPaidAmount(e.target.value)}
+                        className="w-28 px-2.5 py-1 bg-white border border-emerald-300 rounded-lg text-right font-bold text-emerald-800 outline-none"
+                      />
+                    </div>
+
+                    {billDueAmount > 0 ? (
+                      <div className="flex justify-between text-rose-700 font-bold">
+                        <span>বকেয়া (Due):</span>
+                        <span>৳{billDueAmount.toLocaleString('bn-BD')}</span>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between text-emerald-700 font-semibold text-[11px]">
+                        <span>পেমেন্ট অবস্থা:</span>
+                        <span>পরিশোধিত (Paid)</span>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* Submit Buttons */}
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={isSavingBill}
+                    className="py-3 px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl flex items-center gap-2 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    {isSavingBill ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Printer className="w-4 h-4" />
+                        <span>বিল সেভ ও A4 ইনভয়েস প্রিন্ট</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+              </form>
+
+            </div>
+
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 4: CUSTOMER STATEMENT & HISTORY */}
+        {/* ========================================================================= */}
+        {activeTab === 'statements' && (
+          <div className="space-y-6">
+            
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6">
+              
+              <div className="space-y-1">
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-blue-600" />
+                  <span>কাস্টমার স্টেটমেন্ট ও সার্ভিস হিস্ট্রি</span>
+                </h2>
+                <p className="text-xs text-slate-500">
+                  যেকোনো কাস্টমারের মোবাইল নম্বর দিয়ে সার্চ করে তাঁর সর্বমোট খরচ ও নেওয়া সকল সার্ভিসের বিস্তারিত দেখুন।
+                </p>
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="কাস্টমার মোবাইল নম্বর বা নাম লিখুন..."
+                  value={statementPhoneQuery}
+                  onChange={(e) => setStatementPhoneQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-medium focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  autoFocus
+                />
+              </div>
+
+              {/* Statement Result Display */}
+              {statementCustomerData ? (
+                <div className="space-y-6 border-t border-slate-200 pt-6">
+                  
+                  {/* Customer Profile Summary */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200">
+                    <div className="space-y-0.5 col-span-2 sm:col-span-1">
+                      <span className="text-[11px] text-slate-400 uppercase font-bold">গ্রাহকের নাম:</span>
+                      <p className="text-sm sm:text-base font-extrabold text-slate-900">{statementCustomerData.customerName}</p>
+                      <p className="text-xs font-mono text-slate-600">{statementCustomerData.phone}</p>
+                      <p className="text-[11px] text-slate-500 truncate">{statementCustomerData.address}</p>
+                    </div>
+
+                    <div className="space-y-0.5">
+                      <span className="text-[11px] text-slate-400 uppercase font-bold">মোট সার্ভিস গ্রহণ:</span>
+                      <p className="text-xl sm:text-2xl font-extrabold text-blue-600">{statementCustomerData.totalOrdersCount} বার</p>
+                      <p className="text-[10px] text-slate-500">সেবা গ্রহণ করেছেন</p>
+                    </div>
+
+                    <div className="space-y-0.5">
+                      <span className="text-[11px] text-slate-400 uppercase font-bold">সর্বমোট খরচ:</span>
+                      <p className="text-xl sm:text-2xl font-extrabold text-slate-900">৳{statementCustomerData.totalSpent.toLocaleString('bn-BD')}</p>
+                      <p className="text-[10px] text-emerald-700">জমা: ৳{statementCustomerData.totalPaid.toLocaleString('bn-BD')}</p>
+                    </div>
+
+                    <div className="space-y-0.5">
+                      <span className="text-[11px] text-slate-400 uppercase font-bold">বর্তমান বকেয়া:</span>
+                      <p className={`text-xl sm:text-2xl font-extrabold ${statementCustomerData.totalDue > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                        ৳{statementCustomerData.totalDue.toLocaleString('bn-BD')}
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        {statementCustomerData.totalDue > 0 ? 'বকেয়া রয়েছে' : 'কোনো বকেয়া নেই'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Summary of Services Taken */}
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-bold text-slate-800">
+                      এই কাস্টমার যে যে সার্ভিস গ্রহণ করেছেন:
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {statementCustomerData.servicesSummary.map((srv, idx) => (
+                        <div key={idx} className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between text-xs">
+                          <div>
+                            <p className="font-bold text-slate-900">{srv.title}</p>
+                            <span className="text-[11px] text-slate-500">মোট নেওয়া হয়েছে: {srv.count} বার</span>
+                          </div>
+                          <span className="font-bold text-slate-900">৳{srv.total.toLocaleString('bn-BD')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Detailed Visits History Table */}
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-bold text-slate-800">
+                      ভিজিট ও অর্ডারের তারিখ অনুযায়ী তালিকা:
+                    </h3>
+                    <div className="border border-slate-200 rounded-xl overflow-x-auto">
+                      <table className="w-full text-left text-xs min-w-[540px]">
+                        <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                          <tr>
+                            <th className="py-2.5 px-3">তারিখ ও বিল আইডি</th>
+                            <th className="py-2.5 px-3">সার্ভিসসমূহ</th>
+                            <th className="py-2.5 px-3 text-right">বিল টাকা</th>
+                            <th className="py-2.5 px-3 text-center">স্ট্যাটাস</th>
+                            <th className="py-2.5 px-3 text-right">A4 ইনভয়েস</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {statementCustomerData.ordersList.map((o) => (
+                            <tr key={o.orderId} className="hover:bg-slate-50/50">
+                              <td className="py-2.5 px-3">
+                                <span className="font-mono font-bold text-slate-900 block">{o.orderId}</span>
+                                <span className="text-[10px] text-slate-400">
+                                  {new Date(o.createdAt).toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                </span>
+                              </td>
+
+                              <td className="py-2.5 px-3 font-medium text-slate-800">
+                                {o.items.map(it => `${it.productTitle} (x${it.quantity})`).join(', ')}
+                              </td>
+
+                              <td className="py-2.5 px-3 text-right font-bold text-slate-900">
+                                ৳{o.totalAmount.toLocaleString('bn-BD')}
+                              </td>
+
+                              <td className="py-2.5 px-3 text-center">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                  {o.status === 'delivered' ? 'সম্পন্ন' : o.status}
+                                </span>
+                              </td>
+
+                              <td className="py-2.5 px-3 text-right">
+                                <button
+                                  onClick={() => setPrintInvoiceOrder(o)}
+                                  className="px-2.5 py-1 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-600 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                >
+                                  <Printer className="w-3.5 h-3.5" />
+                                  <span>প্রিন্ট</span>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                </div>
+              ) : statementPhoneQuery.trim() ? (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                  <AlertCircle className="w-6 h-6 text-slate-400 mx-auto" />
+                  <p className="text-xs text-slate-600 font-medium">
+                    '{statementPhoneQuery}' নম্বরে কোনো পূর্বের কাস্টমার হিস্ট্রি পাওয়া যায়নি।
+                  </p>
+                </div>
+              ) : (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                  <UserCheck className="w-8 h-8 text-blue-600 mx-auto" />
+                  <p className="text-xs text-slate-600 font-medium">
+                    উপরে কাস্টমারের ফোন নম্বর লিখে সার্চ করলে তাঁর সমস্ত অতীত লেনদেন ও সার্ভিস হিস্ট্রি প্রদর্শিত হবে।
+                  </p>
+                </div>
+              )}
+
+            </div>
+
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 5: SERVICES & STOCK MANAGEMENT */}
+        {/* ========================================================================= */}
+        {activeTab === 'services' && (
+          <div className="space-y-6">
+            
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold text-slate-900">পার্লারের সার্ভিস ও প্যাকেজসমূহ</h2>
+                <span className="text-xs text-slate-500">মোট সার্ভিস: {products.length} টি</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {products.map(prod => (
+                  <div key={prod.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
+                    <div className="aspect-video bg-slate-200 rounded-lg overflow-hidden">
+                      <img src={prod.images[0]} alt={prod.titleBn} className="w-full h-full object-cover" />
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] bg-rose-50 text-rose-700 font-semibold px-2 py-0.5 rounded">
+                        {prod.categoryBn}
+                      </span>
+                      <h4 className="font-bold text-sm text-slate-900 mt-1">{prod.titleBn}</h4>
+                      <p className="text-xs font-extrabold text-slate-900 mt-0.5">
+                        মূল্য: ৳{prod.price.toLocaleString('bn-BD')}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-200">
+                      <span>স্টক / ক্যাপাসিটি: <b>{prod.stockCount}</b></span>
+                      <span className="text-emerald-700 font-medium">সক্রিয় সার্ভিস</span>
                     </div>
                   </div>
                 ))}
               </div>
-
-            </div>
-          )}
-
-          {/* TAB 4: ADD / EDIT SERVICE FORM */}
-          {activeTab === 'add_edit_service' && (
-            <div className="space-y-5 max-w-3xl mx-auto">
-              
-              <div className="flex items-center justify-between bg-slate-950 border border-slate-800 p-4 rounded-3xl">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-300 flex items-center justify-center border border-rose-500/30">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  <h3 className="font-extrabold text-white text-base">
-                    {editingProduct ? `'${editingProduct.titleBn}' এডিট করুন` : 'নতুন সার্ভিস বা প্যাকেজ যোগ করুন'}
-                  </h3>
-                </div>
-
-                <button
-                  onClick={() => setActiveTab('services')}
-                  className="text-xs font-bold text-slate-400 hover:text-white"
-                >
-                  ← তালিকায় ফিরুন
-                </button>
-              </div>
-
-              <form onSubmit={handleSaveProduct} className="bg-slate-950 border border-slate-800 rounded-3xl p-6 space-y-4 text-xs">
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block font-bold text-slate-300 mb-1.5">
-                      সেবার নাম (বাংলা) <span className="text-rose-400">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="যেমন: CSA লেজার স্থায়ী হেয়ার রিমুভাল"
-                      value={formData.titleBn}
-                      onChange={(e) => setFormData({ ...formData, titleBn: e.target.value })}
-                      className="w-full px-4 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-300 mb-1.5">
-                      সেবার নাম (English)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. CSA Laser Hair Removal"
-                      value={formData.title}
-                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                      className="w-full px-4 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block font-bold text-slate-300 mb-1.5">
-                      ক্যাটেগরি নির্বাচন করুন <span className="text-rose-400">*</span>
-                    </label>
-                    <select
-                      value={formData.category}
-                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer"
-                    >
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.nameBn}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-300 mb-1.5">
-                      অফার মূল্য (BDT) <span className="text-rose-400">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      value={formData.price}
-                      onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
-                      className="w-full px-4 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-amber-300 font-extrabold text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-300 mb-1.5">
-                      আগের মূল্য (রেগুলার)
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.originalPrice}
-                      onChange={(e) => setFormData({ ...formData, originalPrice: Number(e.target.value) })}
-                      className="w-full px-4 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-slate-300 font-semibold text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-300 mb-1.5">
-                      স্টক পরিমাণ (Stock Quantity) <span className="text-rose-400">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      value={formData.stockCount}
-                      onChange={(e) => setFormData({ ...formData, stockCount: Number(e.target.value) })}
-                      className="w-full px-4 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-emerald-400 font-extrabold text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Image Upload Component with 100KB Compression */}
-                <div className="space-y-2 bg-slate-900/90 p-4 rounded-2xl border border-slate-800/80">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <label className="block font-bold text-slate-200 text-xs flex items-center gap-1.5">
-                      <Upload className="w-4 h-4 text-rose-400" />
-                      <span>পণ্যের ছবি আপলোড করুন (অটোমেটিক ১০০KB-এর নিচে কমপ্রেস হবে)</span>
-                    </label>
-                    {imageKbSize !== null && (
-                      <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950 px-2.5 py-0.5 rounded-lg border border-emerald-800 shrink-0">
-                        সাইজ: {imageKbSize} KB (১০০KB এর নিচে অপটিমাইজড)
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileUpload}
-                      disabled={isCompressingImage}
-                      className="block w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-rose-600 file:text-white hover:file:bg-rose-500 cursor-pointer"
-                    />
-                    {isCompressingImage && (
-                      <div className="flex items-center gap-1.5 text-xs text-amber-300 font-bold shrink-0">
-                        <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
-                        <span>কমপ্রেস হচ্ছে...</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <p className="text-[10px] text-slate-400 leading-relaxed">
-                    💡 <b>ফায়ারবেস অটো-কমপ্রেসন:</b> আপনি যেকোনো বড় বা হাই-কোয়ালিটি ছবি নির্বাচন করলেও সিস্টেম সেটিকে ১০০KB-এর নিচে কমপ্রেস করে ফায়ারবেসে স্টোর করবে।
-                  </p>
-
-                  <div className="pt-2">
-                    <label className="block font-semibold text-slate-400 text-[11px] mb-1">
-                      অথবা সরাসরি ছবির লিঙ্ক (Image URL) পেস্ট করুন:
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="https://..."
-                      value={formData.imageUrl}
-                      onChange={(e) => {
-                        setImageKbSize(null);
-                        setFormData({ ...formData, imageUrl: e.target.value });
-                      }}
-                      className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
-                    />
-                  </div>
-
-                  {formData.imageUrl && (
-                    <div className="mt-2 flex items-center gap-3 bg-slate-950 p-2 rounded-xl border border-slate-800">
-                      <img
-                        src={formData.imageUrl}
-                        alt="Preview"
-                        className="w-12 h-12 object-cover rounded-lg border border-slate-700 shrink-0"
-                        referrerPolicy="no-referrer"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <span className="text-[11px] font-bold text-slate-200 block">ছবির কারেন্ট প্রিভিউ</span>
-                        <span className="text-[10px] text-slate-400 truncate block">
-                          {formData.imageUrl.startsWith('data:') ? 'অটো-কমপ্রেসড ডাটা ইমেজ (<১০০KB)' : formData.imageUrl.substring(0, 50) + '...'}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-300 mb-1.5">
-                    বিবরণ (বাংলা)
-                  </label>
-                  <textarea
-                    rows={3}
-                    placeholder="সেবার সুবিধা ও বিস্তারিত তথ্য লিখুন..."
-                    value={formData.descriptionBn}
-                    onChange={(e) => setFormData({ ...formData, descriptionBn: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-white text-xs focus:outline-none focus:ring-2 focus:ring-rose-500 leading-relaxed"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-300 mb-1.5">
-                    মূল বৈশিষ্ট্যসমূহ (প্রতি লাইনে একটি করে পয়েন্ট)
-                  </label>
-                  <textarea
-                    rows={3}
-                    placeholder="১০০% ব্যথামুক্ত প্রযুক্তি&#10;অভিজ্ঞ নারী স্পেশালিস্ট"
-                    value={formData.keyFeaturesBn}
-                    onChange={(e) => setFormData({ ...formData, keyFeaturesBn: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-white text-xs focus:outline-none focus:ring-2 focus:ring-rose-500 leading-relaxed font-sans"
-                  />
-                </div>
-
-                <div className="flex flex-wrap items-center gap-6 pt-2">
-                  <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={formData.isFeatured}
-                      onChange={(e) => setFormData({ ...formData, isFeatured: e.target.checked })}
-                      className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500"
-                    />
-                    <span>ফিচার্ড সার্ভিস (হোমপেজে স্পেশাল ক্যাটাগরিতে দেখাবে)</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={formData.isBestSeller}
-                      onChange={(e) => setFormData({ ...formData, isBestSeller: e.target.checked })}
-                      className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500"
-                    />
-                    <span>পপুলার / হট সেলিং</span>
-                  </label>
-                </div>
-
-                <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('services')}
-                    className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs cursor-pointer transition-all border border-slate-700"
-                  >
-                    বাতিল
-                  </button>
-
-                  <button
-                    type="submit"
-                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-extrabold text-xs shadow-lg cursor-pointer transition-all flex items-center gap-1.5"
-                  >
-                    <Save className="w-4 h-4" />
-                    <span>সংরক্ষণ করুন</span>
-                  </button>
-                </div>
-              </form>
-
-            </div>
-          )}
-
-          {/* TAB 5: PARLOUR SETTINGS */}
-          {activeTab === 'settings' && (
-            <div className="space-y-5 max-w-2xl mx-auto">
-              
-              <div className="flex items-center gap-2.5 bg-slate-950 border border-slate-800 p-4 rounded-3xl">
-                <Sliders className="w-5 h-5 text-rose-400" />
-                <div>
-                  <h3 className="font-extrabold text-white text-base">
-                    পার্লারের তথ্য ও হটলাইন সেটিংস
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    ফুটার, হেডার এবং নোটিশে প্রদর্শিত তথ্য পরিবর্তন করুন
-                  </p>
-                </div>
-              </div>
-
-              <form onSubmit={handleSaveSettings} className="bg-slate-950 border border-slate-800 rounded-3xl p-6 space-y-4 text-xs">
-                <div>
-                  <label className="block font-bold text-slate-300 mb-1.5">
-                    পার্লার ও শাখার নাম
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={parlourInfo.branchName}
-                    onChange={(e) => setParlourInfo({ ...parlourInfo, branchName: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-white font-bold text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-300 mb-1.5">
-                    হটলাইন ফোন নম্বর
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={parlourInfo.hotline}
-                    onChange={(e) => setParlourInfo({ ...parlourInfo, hotline: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-amber-300 font-extrabold text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-300 mb-1.5">
-                    পার্লারের ঠিকানা (টাঙ্গাইল শাখা)
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={parlourInfo.address}
-                    onChange={(e) => setParlourInfo({ ...parlourInfo, address: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-white font-semibold text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-300 mb-1.5">
-                    খোলা থাকার সময়সূচি
-                  </label>
-                  <input
-                    type="text"
-                    value={parlourInfo.hours}
-                    onChange={(e) => setParlourInfo({ ...parlourInfo, hours: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-white font-medium text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                </div>
-
-                <div className="pt-3 border-t border-slate-800 flex justify-end">
-                  <button
-                    type="submit"
-                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-extrabold text-xs shadow-lg cursor-pointer transition-all flex items-center gap-1.5"
-                  >
-                    <Save className="w-4 h-4" />
-                    <span>তথ্য সংরক্ষণ করুন</span>
-                  </button>
-                </div>
-              </form>
-
-            </div>
-          )}
-
-        </main>
-      </div>
-
-      {/* Order Detail Modal */}
-      {selectedOrderDetails && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-slate-900 text-slate-100 rounded-3xl max-w-lg w-full p-6 space-y-4 relative border border-slate-800 shadow-2xl">
-            <button
-              onClick={() => setSelectedOrderDetails(null)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1.5 rounded-full"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-              <span className="font-extrabold text-rose-400 text-base">
-                অর্ডার বিস্তারিত - #{selectedOrderDetails.orderId}
-              </span>
             </div>
 
-            <div className="space-y-2.5 text-xs text-slate-300">
-              <div className="flex justify-between">
-                <span className="text-slate-500">গ্রাহকের নাম:</span>
-                <span className="font-extrabold text-white">{selectedOrderDetails.customerName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">মোবাইল নম্বর:</span>
-                <a href={`tel:${selectedOrderDetails.phone}`} className="font-bold text-amber-300 hover:underline">
-                  {selectedOrderDetails.phone}
-                </a>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">ঠিকানা/নোট:</span>
-                <span className="font-semibold text-slate-200 text-right max-w-[220px]">
-                  {selectedOrderDetails.address}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">তারিখ:</span>
-                <span className="font-medium text-slate-400">
-                  {new Date(selectedOrderDetails.createdAt).toLocaleString('bn-BD')}
-                </span>
-              </div>
-
-              <div className="pt-3 border-t border-slate-800">
-                <span className="font-bold text-white block mb-1.5">বুককৃত সার্ভিসসমূহ (ছবি সহ):</span>
-                <div className="space-y-2 bg-slate-950 p-3 rounded-2xl border border-slate-800 max-h-60 overflow-y-auto">
-                  {selectedOrderDetails.items.map((it, idx) => {
-                    const imgUrl = getItemImageUrl(it);
-                    return (
-                      <div
-                        key={idx}
-                        className="flex items-center gap-3 p-2 bg-slate-900/90 rounded-xl border border-slate-800"
-                      >
-                        <img
-                          src={imgUrl}
-                          alt={it.productTitle}
-                          className="w-12 h-12 object-cover rounded-xl shrink-0 border border-slate-700"
-                          referrerPolicy="no-referrer"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <span className="font-extrabold text-white text-xs block line-clamp-1">
-                            {it.productTitle}
-                          </span>
-                          <span className="text-[11px] text-slate-400">
-                            পরিমাণ: <span className="text-amber-300 font-bold">x{it.quantity}</span>
-                          </span>
-                        </div>
-                        <span className="font-extrabold text-amber-300 text-xs shrink-0">
-                          ৳{(it.price * it.quantity).toLocaleString('bn-BD')}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex justify-between pt-3 border-t border-slate-800 font-extrabold text-white text-sm">
-                <span>মোট পেমেন্ট:</span>
-                <span className="text-rose-400">৳{selectedOrderDetails.totalAmount.toLocaleString('bn-BD')}</span>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setSelectedOrderDetails(null)}
-              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-colors border border-slate-700"
-            >
-              বন্ধ করুন
-            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* QUICK RESTOCK MODAL */}
-      {restockProduct && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
-                  <Boxes className="w-4 h-4" />
-                </div>
-                <h3 className="font-extrabold text-white text-sm">নতুন স্টক যুক্ত করুন (Restock)</h3>
-              </div>
-              <button
-                onClick={() => setRestockProduct(null)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
+        {/* ========================================================================= */}
+        {/* TAB 6: SETTINGS */}
+        {/* ========================================================================= */}
+        {activeTab === 'settings' && (
+          <div className="max-w-2xl bg-white rounded-2xl border border-slate-200 p-6 space-y-6">
+            <div className="space-y-0.5">
+              <h2 className="text-base font-bold text-slate-900">পার্লার ও ইনভয়েস সেটিংস</h2>
+              <p className="text-xs text-slate-500">ইনভয়েস এবং ওয়েবসাইটে প্রদর্শিত তথ্য পরিবর্তন করুন।</p>
             </div>
 
-            <div className="space-y-2">
-              <p className="text-xs text-slate-300 font-bold line-clamp-1">
-                {restockProduct.titleBn}
-              </p>
-              <div className="flex items-center justify-between text-xs bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                <span className="text-slate-400">বর্তমান স্টক:</span>
-                <span className="font-extrabold text-amber-300">{restockProduct.stockCount || 0} টি</span>
-              </div>
-            </div>
-
-            <form onSubmit={handleApplyRestock} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-200 mb-1.5">
-                  কতগুলো নতুন স্টক যোগ করবেন?
-                </label>
+            <form onSubmit={handleSaveSettings} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">পার্লারের পূর্ণ নাম:</label>
                 <input
-                  type="number"
-                  required
-                  min="1"
-                  value={addStockQty}
-                  onChange={(e) => setAddStockQty(Number(e.target.value))}
-                  className="w-full px-4 py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-emerald-400 font-extrabold text-base focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="যেমন: 10, 20, 50"
+                  type="text"
+                  value={parlourInfo.branchName}
+                  onChange={(e) => setParlourInfo({ ...parlourInfo, branchName: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none"
                 />
               </div>
 
-              <div className="flex items-center gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setRestockProduct(null)}
-                  className="w-1/2 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs hover:bg-slate-700 cursor-pointer"
-                >
-                  বাতিল
-                </button>
-                <button
-                  type="submit"
-                  className="w-1/2 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-md cursor-pointer"
-                >
-                  + স্টক আপডেট করুন
-                </button>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">হটলাইন নম্বর:</label>
+                <input
+                  type="text"
+                  value={parlourInfo.hotline}
+                  onChange={(e) => setParlourInfo({ ...parlourInfo, hotline: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono outline-none"
+                />
               </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">ঠিকানা:</label>
+                <input
+                  type="text"
+                  value={parlourInfo.address}
+                  onChange={(e) => setParlourInfo({ ...parlourInfo, address: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">খোলা থাকার সময়সূচি:</label>
+                <input
+                  type="text"
+                  value={parlourInfo.hours}
+                  onChange={(e) => setParlourInfo({ ...parlourInfo, hours: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="py-2.5 px-5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>সেটিংস সংরক্ষণ করুন</span>
+              </button>
             </form>
           </div>
-        </div>
+        )}
+
+      </main>
+
+      {/* A4 Printable Invoice Modal Component */}
+      {printInvoiceOrder && (
+        <A4PrintInvoice
+          order={printInvoiceOrder}
+          onClose={() => setPrintInvoiceOrder(null)}
+          parlourInfo={parlourInfo}
+        />
       )}
 
     </div>

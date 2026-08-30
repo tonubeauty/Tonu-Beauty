@@ -20,8 +20,6 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
   onDeliveryZoneChange,
   onOrderComplete,
 }) => {
-  if (!isOpen) return null;
-
   const [formData, setFormData] = useState<OrderFormData>({
     fullName: '',
     phone: '',
@@ -115,6 +113,8 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
       setIsSubmitting(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">

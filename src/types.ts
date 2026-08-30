@@ -42,7 +42,7 @@ export interface OrderFormData {
   area?: string;
   deliveryNote?: string;
   deliveryZone: DeliveryZone;
-  paymentMethod: 'cod'; // Fixed to Cash on Delivery as requested
+  paymentMethod: 'cod' | 'cash' | 'bkash' | 'nagad';
   agreeTerms: boolean;
 }
 
@@ -54,6 +54,16 @@ export interface OrderTrackingEvent {
   completed: boolean;
 }
 
+export interface OrderItem {
+  productId: string;
+  productTitle: string;
+  quantity: number;
+  price: number;
+  color?: string;
+  size?: string;
+  image?: string;
+}
+
 export interface Order {
   orderId: string;
   createdAt: string;
@@ -61,20 +71,17 @@ export interface Order {
   phone: string;
   address: string;
   district: string;
-  deliveryZone: DeliveryZone;
-  items: {
-    productId: string;
-    productTitle: string;
-    quantity: number;
-    price: number;
-    color?: string;
-    size?: string;
-    image: string;
-  }[];
+  deliveryZone?: DeliveryZone;
+  orderType?: 'appointment' | 'order' | 'manual_bill';
+  items: OrderItem[];
   subtotal: number;
   deliveryFee: number;
+  discount?: number;
+  paidAmount?: number;
+  dueAmount?: number;
+  notes?: string;
   totalAmount: number;
-  paymentMethod: 'cod';
+  paymentMethod: 'cod' | 'cash' | 'bkash' | 'nagad';
   status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered';
   trackingHistory: OrderTrackingEvent[];
   securityHash?: string;
