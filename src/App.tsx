@@ -32,7 +32,21 @@ export default function App() {
     }
   });
 
-  // Load latest products and stock levels from Firestore on mount
+  // Modal & Filter States
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [deliveryZone, setDeliveryZone] = useState<DeliveryZone>('inside_dhaka');
+  const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isOrderFormOpen, setIsOrderFormOpen] = useState(false);
+  const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
+  const [isTrackModalOpen, setIsTrackModalOpen] = useState(false);
+  const [trackOrderId, setTrackOrderId] = useState('');
+  const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
+  const [appointmentService, setAppointmentService] = useState('');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Load products from Firestore
   useEffect(() => {
     async function loadFirestoreProducts() {
       try {
@@ -47,6 +61,99 @@ export default function App() {
     }
     loadFirestoreProducts();
   }, []);
+
+  // Helper to push history state when opening a modal or view
+  const pushModalHistory = (type: string) => {
+    try {
+      window.history.pushState({ modal: type, timestamp: Date.now() }, '');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // Synchronized Browser & Hardware Back Button Handler
+  useEffect(() => {
+    // Initial history state setup
+    try {
+      if (!window.history.state || !window.history.state.root) {
+        window.history.replaceState({ root: true, view: 'website' }, '');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      // Step-by-step Back Navigation: Closes whichever layer is open
+      if (completedOrder) {
+        setCompletedOrder(null);
+        return;
+      }
+      if (isOrderFormOpen) {
+        setIsOrderFormOpen(false);
+        return;
+      }
+      if (isAppointmentModalOpen) {
+        setIsAppointmentModalOpen(false);
+        return;
+      }
+      if (isTrackModalOpen) {
+        setIsTrackModalOpen(false);
+        return;
+      }
+      if (isCartOpen) {
+        setIsCartOpen(false);
+        return;
+      }
+      if (quickViewProduct) {
+        setQuickViewProduct(null);
+        return;
+      }
+      if (currentView === 'admin') {
+        setCurrentView('website');
+        return;
+      }
+      if (selectedCategory !== 'all') {
+        setSelectedCategory('all');
+        return;
+      }
+      if (searchQuery !== '') {
+        setSearchQuery('');
+        return;
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [
+    completedOrder,
+    isOrderFormOpen,
+    isAppointmentModalOpen,
+    isTrackModalOpen,
+    isCartOpen,
+    quickViewProduct,
+    currentView,
+    selectedCategory,
+    searchQuery,
+  ]);
+
+  // Always return to home page and reset views
+  const handleGoHome = () => {
+    setQuickViewProduct(null);
+    setIsCartOpen(false);
+    setIsOrderFormOpen(false);
+    setCompletedOrder(null);
+    setIsTrackModalOpen(false);
+    setIsAppointmentModalOpen(false);
+    setCurrentView('website');
+    setSelectedCategory('all');
+    setSearchQuery('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    try {
+      window.history.replaceState({ root: true, view: 'website' }, '');
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Check URL query parameters or hash for direct product sharing (?product=PROD_ID)
   useEffect(() => {
@@ -72,8 +179,6 @@ export default function App() {
     };
 
     handleUrlProduct();
-    window.addEventListener('popstate', handleUrlProduct);
-    return () => window.removeEventListener('popstate', handleUrlProduct);
   }, [products]);
 
   const handleUpdateProducts = (updatedList: Product[]) => {
@@ -85,11 +190,7 @@ export default function App() {
     }
   };
 
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [deliveryZone, setDeliveryZone] = useState<DeliveryZone>('inside_dhaka');
-
-  // Load cart from localStorage if available
+  // Cart items state
   const [cartItems, setCartItems] = useState<CartItem[]>(() => {
     try {
       const saved = localStorage.getItem('deshibazar_cart');
@@ -98,22 +199,6 @@ export default function App() {
       return [];
     }
   });
-
-  // Modal States
-  const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
-  const [isCartOpen, setIsCartOpen] = useState(false);
-  const [isOrderFormOpen, setIsOrderFormOpen] = useState(false);
-  const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
-  const [isTrackModalOpen, setIsTrackModalOpen] = useState(false);
-  const [trackOrderId, setTrackOrderId] = useState('');
-  
-  // Beauty Appointment & Admin Modal States
-  const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
-  const [appointmentService, setAppointmentService] = useState('');
-  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
-
-  // Toast notification state
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Save cart to localStorage on change
   useEffect(() => {
@@ -163,6 +248,7 @@ export default function App() {
   ) => {
     handleAddToCart(product, quantity, selectedColor, selectedSize);
     if (quickViewProduct) setQuickViewProduct(null);
+    pushModalHistory('orderForm');
     setIsOrderFormOpen(true);
   };
 
@@ -183,6 +269,7 @@ export default function App() {
 
   const handleProceedToCheckout = () => {
     setIsCartOpen(false);
+    pushModalHistory('orderForm');
     setIsOrderFormOpen(true);
   };
 
@@ -190,11 +277,13 @@ export default function App() {
     setCartItems([]);
     localStorage.removeItem('deshibazar_cart');
     setIsOrderFormOpen(false);
+    pushModalHistory('orderSuccess');
     setCompletedOrder(newOrder);
   };
 
   const handleOpenTrackModalWithId = (id = '') => {
     setTrackOrderId(id);
+    pushModalHistory('track');
     setIsTrackModalOpen(true);
   };
 
@@ -210,13 +299,16 @@ export default function App() {
         onUpdateProducts={handleUpdateProducts}
         categories={CATEGORIES}
         onToast={showToast}
-        onBackToWebsite={() => setCurrentView('website')}
+        onBackToWebsite={() => {
+          setCurrentView('website');
+          window.history.replaceState({ root: true, view: 'website' }, '');
+        }}
       />
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800 font-['Anek_Bangla','Plus_Jakarta_Sans',sans-serif] pb-16 md:pb-0">
+    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800 font-['Anek_Bangla','Plus_Jakarta_Sans',sans-serif] pb-20 md:pb-0">
       
       {/* Toast Notification Popup */}
       {toastMessage && (
@@ -234,16 +326,27 @@ export default function App() {
         cartTotal={cartSubtotal}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        onOpenCart={() => setIsCartOpen(true)}
+        onOpenCart={() => {
+          pushModalHistory('cart');
+          setIsCartOpen(true);
+        }}
         onOpenTrackModal={() => handleOpenTrackModalWithId('')}
         categories={CATEGORIES}
         selectedCategory={selectedCategory}
-        onSelectCategory={setSelectedCategory}
+        onSelectCategory={(catId) => {
+          pushModalHistory('category');
+          setSelectedCategory(catId);
+        }}
         onOpenAppointmentModal={() => {
           setAppointmentService('');
+          pushModalHistory('appointment');
           setIsAppointmentModalOpen(true);
         }}
-        onOpenAdminModal={() => setCurrentView('admin')}
+        onOpenAdminModal={() => {
+          pushModalHistory('admin');
+          setCurrentView('admin');
+        }}
+        onGoHome={handleGoHome}
       />
 
       {/* Main Content Area */}
@@ -253,6 +356,7 @@ export default function App() {
           onExploreClick={scrollToCatalog}
           onOpenAppointmentModal={() => {
             setAppointmentService('');
+            pushModalHistory('appointment');
             setIsAppointmentModalOpen(true);
           }}
         />
@@ -261,9 +365,11 @@ export default function App() {
         <TanuBeautySection
           onBookAppointment={(serviceName) => {
             setAppointmentService(serviceName || '');
+            pushModalHistory('appointment');
             setIsAppointmentModalOpen(true);
           }}
           onExploreBeautyProducts={() => {
+            pushModalHistory('category');
             setSelectedCategory('csa_laser');
             scrollToCatalog();
           }}
@@ -274,9 +380,15 @@ export default function App() {
           products={products}
           categories={CATEGORIES}
           selectedCategory={selectedCategory}
-          onSelectCategory={setSelectedCategory}
+          onSelectCategory={(catId) => {
+            pushModalHistory('category');
+            setSelectedCategory(catId);
+          }}
           searchQuery={searchQuery}
-          onQuickView={setQuickViewProduct}
+          onQuickView={(p) => {
+            pushModalHistory('quickView');
+            setQuickViewProduct(p);
+          }}
           onAddToCart={handleAddToCart}
           onDirectOrder={handleDirectOrder}
           onToast={showToast}
@@ -290,24 +402,33 @@ export default function App() {
       <Footer
         onOpenTrackModal={() => handleOpenTrackModalWithId('')}
         onSelectCategory={(catId) => {
+          pushModalHistory('category');
           setSelectedCategory(catId);
           scrollToCatalog();
         }}
         onOpenAppointmentModal={() => {
           setAppointmentService('');
+          pushModalHistory('appointment');
           setIsAppointmentModalOpen(true);
         }}
-        onOpenAdminDashboard={() => setCurrentView('admin')}
+        onOpenAdminDashboard={() => {
+          pushModalHistory('admin');
+          setCurrentView('admin');
+        }}
       />
 
       {/* Floating Sticky Mobile Bar */}
       <FloatingMobileBar
         cartCount={totalCartCount}
         cartTotal={cartSubtotal}
-        onOpenCart={() => setIsCartOpen(true)}
+        onOpenCart={() => {
+          pushModalHistory('cart');
+          setIsCartOpen(true);
+        }}
         onOpenTrackModal={() => handleOpenTrackModalWithId('')}
         onOpenAppointmentModal={() => {
           setAppointmentService('');
+          pushModalHistory('appointment');
           setIsAppointmentModalOpen(true);
         }}
       />

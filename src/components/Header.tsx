@@ -14,6 +14,7 @@ interface HeaderProps {
   onSelectCategory: (id: string) => void;
   onOpenAppointmentModal?: () => void;
   onOpenAdminModal?: () => void;
+  onGoHome?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -28,8 +29,19 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectCategory,
   onOpenAppointmentModal,
   onOpenAdminModal,
+  onGoHome,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleBrandClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setMobileMenuOpen(false);
+    if (onGoHome) {
+      onGoHome();
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-rose-100 shadow-xs">
@@ -84,12 +96,18 @@ export const Header: React.FC<HeaderProps> = ({
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
 
-            <a href="#" className="flex items-center gap-2.5 group">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-600 via-pink-600 to-indigo-800 flex items-center justify-center text-white font-extrabold text-xl shadow-md group-hover:scale-105 transition-transform">
+            <a
+              id="header-institution-brand"
+              href="#"
+              onClick={handleBrandClick}
+              className="flex items-center gap-2.5 group cursor-pointer"
+              title="হোম পেজে যান"
+            >
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-600 via-pink-600 to-indigo-800 flex items-center justify-center text-white font-extrabold text-xl shadow-md group-hover:scale-105 transition-transform shrink-0">
                 তনু
               </div>
               <div>
-                <span className="text-lg sm:text-xl font-extrabold tracking-tight text-slate-900 block leading-tight">
+                <span className="text-lg sm:text-xl font-extrabold tracking-tight text-slate-900 block leading-tight group-hover:text-rose-700 transition-colors">
                   তনু বিউটি পার্লার <span className="text-rose-600 font-bold">& লেজার সেন্টার</span>
                 </span>
                 <span className="text-[10px] text-rose-800 font-semibold tracking-wide block -mt-0.5">
