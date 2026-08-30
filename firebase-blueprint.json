@@ -1,0 +1,28 @@
+{
+  "entities": {
+    "orders": {
+      "title": "Orders",
+      "description": "Customer bookings and appointments",
+      "properties": {
+        "orderId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "products": {
+      "title": "Products and Services",
+      "description": "Beauty parlour services and laser treatment catalog",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "titleBn": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string" }
+      }
+    }
+  }
+}
