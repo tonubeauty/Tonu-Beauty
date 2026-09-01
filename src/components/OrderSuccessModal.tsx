@@ -43,7 +43,7 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
         </div>
 
         {/* Scrollable Receipt Body */}
-        <div id="printable-receipt" className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1 text-xs sm:text-sm">
+        <div id="printable-receipt" data-lenis-prevent className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1 text-xs sm:text-sm">
           
           {/* Order ID Box */}
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">

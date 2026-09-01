@@ -83,7 +83,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         )}
 
         {/* Items List */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar">
+        <div data-lenis-prevent className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar">
           {cartItems.length > 0 ? (
             cartItems.map(({ product, quantity, selectedColor }) => (
               <div

@@ -136,7 +136,7 @@ export const BeautyAppointmentModal: React.FC<BeautyAppointmentModalProps> = ({
         </div>
 
         {/* Content Body */}
-        <div className="p-5 sm:p-6 max-h-[80vh] overflow-y-auto no-scrollbar">
+        <div data-lenis-prevent className="p-5 sm:p-6 max-h-[80vh] overflow-y-auto no-scrollbar">
           {isSubmitted ? (
             <div className="text-center py-6 space-y-4">
               <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">

@@ -12,6 +12,7 @@ import {
 } from '../lib/firebase';
 import { A4PrintInvoice } from './A4PrintInvoice';
 import { ServiceManagerModal } from './ServiceManagerModal';
+import { resizeScroll, resumeScroll } from '../lib/smoothScroll';
 import {
   LayoutDashboard,
   ClipboardList,
@@ -227,6 +228,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return () => unsubscribe();
     }
   }, [isAuthenticated]);
+
+  // Recalculate Lenis scroll dimensions whenever activeTab or modal changes in Admin
+  useEffect(() => {
+    resizeScroll();
+    resumeScroll();
+  }, [activeTab, isServiceModalOpen, printInvoiceOrder]);
 
   // Handle Login with Passcode
   const handleLogin = (e: React.FormEvent) => {

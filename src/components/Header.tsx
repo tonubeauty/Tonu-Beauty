@@ -20,6 +20,7 @@ import {
   MessageCircle 
 } from 'lucide-react';
 import { Category } from '../types';
+import { scrollToTarget } from '../lib/smoothScroll';
 
 interface HeaderProps {
   cartCount: number;
@@ -86,7 +87,7 @@ export const Header: React.FC<HeaderProps> = ({
     if (onGoHome) {
       onGoHome();
     } else {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollToTarget('body', 0);
     }
   };
 

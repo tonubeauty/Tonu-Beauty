@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PRODUCTS, CATEGORIES } from './data/products';
 import { Product, CartItem, DeliveryZone, Order } from './types';
 import { getProductsFromFirestore, subscribeToProducts } from './lib/firebase';
+import { initSmoothScroll, scrollToTarget, pauseScroll, resumeScroll, resizeScroll } from './lib/smoothScroll';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { ProductCatalog } from './components/ProductCatalog';
@@ -45,6 +46,43 @@ export default function App() {
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
   const [appointmentService, setAppointmentService] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Initialize Lenis Momentum Smooth Scroll Engine
+  useEffect(() => {
+    const cleanup = initSmoothScroll();
+    return () => {
+      cleanup();
+    };
+  }, []);
+
+  // Pause / Resume Lenis when true overlay modals or drawers are open
+  useEffect(() => {
+    const isAnyOverlayModalOpen =
+      isCartOpen ||
+      isOrderFormOpen ||
+      !!completedOrder ||
+      isTrackModalOpen ||
+      isAppointmentModalOpen;
+
+    if (isAnyOverlayModalOpen) {
+      pauseScroll();
+    } else {
+      resumeScroll();
+    }
+  }, [
+    isCartOpen,
+    isOrderFormOpen,
+    completedOrder,
+    isTrackModalOpen,
+    isAppointmentModalOpen,
+  ]);
+
+  // Dynamic Lenis Scroll Re-calibration across all view, product detail & category switches
+  useEffect(() => {
+    // Unstuck and resize scroll
+    resumeScroll();
+    resizeScroll();
+  }, [currentView, selectedCategory, searchQuery, products.length, quickViewProduct]);
 
   // Load products from Firestore & Real-Time Sync
   useEffect(() => {
@@ -156,7 +194,7 @@ export default function App() {
     setCurrentView('website');
     setSelectedCategory('all');
     setSearchQuery('');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTarget('body', 0);
     try {
       window.history.replaceState({ root: true, view: 'website' }, '');
     } catch (e) {
@@ -309,8 +347,7 @@ export default function App() {
   };
 
   const scrollToCatalog = () => {
-    const el = document.getElementById('catalog-section');
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    scrollToTarget('#catalog-section', -70);
   };
 
   if (currentView === 'admin') {

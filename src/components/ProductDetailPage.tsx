@@ -15,6 +15,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { Product } from '../types';
+import { scrollToTarget, resizeScroll, resumeScroll } from '../lib/smoothScroll';
 
 interface ProductDetailPageProps {
   product: Product;
@@ -45,7 +46,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const [isCopied, setIsCopied] = useState(false);
 
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    resumeScroll();
+    resizeScroll();
+    scrollToTarget('body', 0);
   }, [product.id]);
 
   const handleShare = async () => {

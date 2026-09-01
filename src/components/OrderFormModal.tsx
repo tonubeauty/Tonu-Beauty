@@ -144,7 +144,7 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
         </div>
 
         {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} className="overflow-y-auto p-5 sm:p-6 space-y-5 flex-1 no-scrollbar">
+        <form onSubmit={handleSubmit} data-lenis-prevent className="overflow-y-auto p-5 sm:p-6 space-y-5 flex-1 no-scrollbar">
           
           {/* Error Banner */}
           {errorMessage && (

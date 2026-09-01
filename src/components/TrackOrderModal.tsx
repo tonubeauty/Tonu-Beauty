@@ -360,7 +360,7 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1 no-scrollbar">
+        <div data-lenis-prevent className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1 no-scrollbar">
           
           {/* Search Input Bar */}
           <form onSubmit={handleSearchSubmit} className="space-y-1.5">
