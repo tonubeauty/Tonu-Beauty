@@ -82,6 +82,25 @@ function isValidBDPhone(phone: string): boolean {
   return bdPhoneRegex.test(cleanPhone);
 }
 
+// Convert Bengali numerals to English numerals
+function normalizeBnToEn(str: string): string {
+  if (!str) return '';
+  const bnToEn: Record<string, string> = {
+    '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+    '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'
+  };
+  return str.replace(/[০-৯]/g, (d) => bnToEn[d] || d);
+}
+
+// Clean string for unified search comparison
+function cleanSearchQuery(str: string): string {
+  if (!str) return '';
+  return normalizeBnToEn(str)
+    .replace(/[\s\-_#,:;./\\]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -262,29 +281,55 @@ async function startServer() {
 
   // API Route: Order Status Tracking Lookup
   app.get('/api/orders/track', (req: Request, res: Response) => {
-    const query = sanitizeInput((req.query.query as string) || '').trim();
+    const rawQuery = sanitizeInput((req.query.query as string) || '').trim();
 
-    if (!query) {
+    if (!rawQuery) {
       return res.status(400).json({
         success: false,
-        messageBn: 'অনুগ্রহ করে আপনার অর্ডার আইডি (যেমন: BD-88412) অথবা ১১ ডিজিটের মোবাইল নম্বর প্রদান করুন।'
+        messageBn: 'অনুগ্রহ করে আপনার অর্ডার আইডি (যেমন: BD-88412 বা TB-123456) অথবা মোবাইল নম্বর প্রদান করুন।'
       });
     }
 
-    const cleanQuery = query.replace(/[\s-]/g, '');
+    const cleanQ = cleanSearchQuery(rawQuery);
+    const queryDigits = cleanQ.replace(/\D/g, '');
 
-    // Search by Order ID or Mobile number
-    const foundOrders = ordersStore.filter(
-      (o) =>
-        o.orderId.toLowerCase() === query.toLowerCase() ||
-        o.phone.includes(cleanQuery) ||
-        cleanQuery.includes(o.phone.replace(/[\s-]/g, ''))
-    );
+    // Search by Order ID or Mobile number or Customer Name
+    const foundOrders = ordersStore.filter((o) => {
+      const cleanOrderId = cleanSearchQuery(o.orderId || '');
+      const cleanPhone = cleanSearchQuery(o.phone || '');
+      const cleanCustomer = (o.customerName || '').toLowerCase().trim();
+
+      // 1. Order ID Match
+      if (cleanOrderId && (cleanOrderId.includes(cleanQ) || cleanQ.includes(cleanOrderId))) {
+        return true;
+      }
+
+      // 2. Numeric digits match
+      const orderDigits = cleanOrderId.replace(/\D/g, '');
+      if (queryDigits.length >= 3 && orderDigits && (orderDigits.includes(queryDigits) || queryDigits.includes(orderDigits))) {
+        return true;
+      }
+
+      // 3. Phone match
+      const phoneDigits = cleanPhone.replace(/\D/g, '');
+      if (queryDigits.length >= 4 && phoneDigits) {
+        if (phoneDigits.includes(queryDigits) || queryDigits.includes(phoneDigits)) {
+          return true;
+        }
+      }
+
+      // 4. Customer Name match
+      if (cleanCustomer && cleanCustomer.includes(rawQuery.toLowerCase().trim())) {
+        return true;
+      }
+
+      return false;
+    });
 
     if (foundOrders.length === 0) {
       return res.status(404).json({
         success: false,
-        messageBn: 'দুঃখিত! এই অর্ডার আইডি বা মোবাইল নম্বরে কোনো অর্ডার পাওয়া যায়নি।'
+        messageBn: 'দুঃখিত! এই বুকিং আইডি বা মোবাইল নম্বরে কোনো অর্ডার রেকর্ড পাওয়া যায়নি।'
       });
     }
 

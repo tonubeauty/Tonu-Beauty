@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Product, Category, FilterOptions } from '../types';
 import { ProductCard } from './ProductCard';
-import { ArrowUpDown, Filter } from 'lucide-react';
+import { ArrowUpDown, Filter, QrCode } from 'lucide-react';
 
 interface ProductCatalogProps {
   products: Product[];
@@ -13,6 +13,7 @@ interface ProductCatalogProps {
   onAddToCart: (product: Product) => void;
   onDirectOrder: (product: Product) => void;
   onToast?: (msg: string) => void;
+  onOpenTrackModal?: (initialId?: string) => void;
 }
 
 export const ProductCatalog: React.FC<ProductCatalogProps> = ({
@@ -25,6 +26,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   onAddToCart,
   onDirectOrder,
   onToast,
+  onOpenTrackModal,
 }) => {
   const [sortBy, setSortBy] = useState<FilterOptions['sortBy']>('popular');
   const [inStockOnly, setInStockOnly] = useState(false);
@@ -61,6 +63,19 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
         return (b.reviewCount || 0) - (a.reviewCount || 0);
       });
   }, [products, selectedCategory, searchQuery, inStockOnly, sortBy]);
+
+  const looksLikeBookingIdOrPhone = useMemo(() => {
+    const q = searchQuery.trim();
+    if (!q) return false;
+    const clean = q.replace(/[\s\-_#,:;./\\]/g, '').toLowerCase();
+    return (
+      clean.startsWith('tb') ||
+      clean.startsWith('bd') ||
+      clean.startsWith('01') ||
+      clean.startsWith('০১') ||
+      clean.replace(/\D/g, '').length >= 5
+    );
+  }, [searchQuery]);
 
   return (
     <section id="catalog-section" className="py-10 bg-slate-50/60 min-h-[500px]">
@@ -151,20 +166,43 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
             ))}
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center max-w-sm mx-auto space-y-3">
-            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-400">
-              <Filter className="w-6 h-6" />
-            </div>
-            <h3 className="text-base font-bold text-slate-900">কোনো সার্ভিস পাওয়া যায়নি</h3>
-            <p className="text-xs text-slate-500">
-              অন্য কোনো কি-ওয়ার্ড বা ক্যাটেগরি নির্বাচন করে চেষ্টা করুন।
-            </p>
-            <button
-              onClick={() => onSelectCategory('all')}
-              className="px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold text-xs transition-colors cursor-pointer"
-            >
-              সবগুলো দেখুন
-            </button>
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 sm:p-10 text-center max-w-md mx-auto space-y-4 shadow-xs">
+            {looksLikeBookingIdOrPhone && onOpenTrackModal ? (
+              <div className="space-y-3">
+                <div className="w-14 h-14 bg-amber-50 border border-amber-200 text-amber-600 rounded-2xl flex items-center justify-center mx-auto shadow-xs">
+                  <QrCode className="w-7 h-7" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900">
+                  এটি একটি বুকিং আইডি বা মোবাইল নম্বর!
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  আপনি কি <span className="font-bold text-rose-600 font-mono">"{searchQuery}"</span> দিয়ে আপনার বুকিং বা অর্ডারের লাইভ ট্র্যাকিং তথ্য দেখতে চান?
+                </p>
+                <button
+                  onClick={() => onOpenTrackModal(searchQuery)}
+                  className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                >
+                  <QrCode className="w-4 h-4" />
+                  <span>লাইভ বুকিং ট্র্যাকিং দেখুন</span>
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-400">
+                  <Filter className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900">কোনো সার্ভিস পাওয়া যায়নি</h3>
+                <p className="text-xs text-slate-500">
+                  অন্য কোনো কি-ওয়ার্ড বা ক্যাটেগরি নির্বাচন করে চেষ্টা করুন।
+                </p>
+                <button
+                  onClick={() => onSelectCategory('all')}
+                  className="px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold text-xs transition-colors cursor-pointer"
+                >
+                  সবগুলো দেখুন
+                </button>
+              </>
+            )}
           </div>
         )}
 

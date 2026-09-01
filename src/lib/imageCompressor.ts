@@ -1,96 +1,129 @@
 /**
- * Utility to compress any uploaded or provided image file or base64 string
- * down to less than 100 KB (102,400 bytes) using HTML5 Canvas.
+ * Client-Side Image Compressor
+ * Automatically compresses, downscales, and optimizes any uploaded image
+ * to strictly stay under 200 KB (204,800 bytes) with high visual clarity.
  */
 
-export async function compressImageFileToMaxKB(
-  file: File | string,
-  maxKB: number = 100
-): Promise<string> {
-  const maxBytes = maxKB * 1024;
+export interface CompressionResult {
+  dataUrl: string;
+  sizeBytes: number;
+  sizeKb: number;
+  originalSizeKb: number;
+  width: number;
+  height: number;
+  format: string;
+}
 
-  // Helper to load image
-  const loadImage = (src: string): Promise<HTMLImageElement> => {
-    return new Promise((resolve, reject) => {
+export async function compressImageFile(
+  file: File | Blob,
+  maxSizeBytes = 200 * 1024 // 200 KB threshold
+): Promise<CompressionResult> {
+  const originalSizeKb = Math.round(file.size / 1024);
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (event) => {
       const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => resolve(img);
-      img.onerror = (err) => reject(err);
-      img.src = src;
-    });
-  };
+      img.onload = () => {
+        try {
+          let width = img.naturalWidth || img.width;
+          let height = img.naturalHeight || img.height;
 
-  let imageSrc = '';
-  if (typeof file === 'string') {
-    imageSrc = file;
-  } else {
-    imageSrc = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target?.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
+          // Maximum bounding dimension (1200px provides ultra-crisp display on retina screens)
+          const MAX_DIMENSION = 1200;
+          if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+            if (width > height) {
+              height = Math.round((height * MAX_DIMENSION) / width);
+              width = MAX_DIMENSION;
+            } else {
+              width = Math.round((width * MAX_DIMENSION) / height);
+              height = MAX_DIMENSION;
+            }
+          }
 
-  // If already a tiny data URL or small remote URL, test its size if data URL
-  if (imageSrc.startsWith('data:') && imageSrc.length <= maxBytes * 1.3) {
-    // If base64 length is roughly under target, load and return or quickly verify
-  }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
 
-  const img = await loadImage(imageSrc);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Canvas context could not be created'));
+            return;
+          }
 
-  let width = img.width;
-  let height = img.height;
+          // Smooth rendering
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
 
-  // Max dimension initial limit (e.g., 1000px max)
-  const maxDim = 1000;
-  if (width > maxDim || height > maxDim) {
-    if (width > height) {
-      height = Math.round((height * maxDim) / width);
-      width = maxDim;
-    } else {
-      width = Math.round((width * maxDim) / height);
-      height = maxDim;
-    }
-  }
+          // Fill white background for transparent PNGs converted to JPEG
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
 
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
-    return imageSrc;
-  }
+          // Iterative compression to ensure strictly <= 200 KB
+          let quality = 0.88;
+          let mimeType = 'image/jpeg';
+          let dataUrl = canvas.toDataURL(mimeType, quality);
+          let currentBytes = calculateBase64Size(dataUrl);
 
-  let quality = 0.85;
-  let resultDataUrl = '';
+          // If still over 200KB, gradually reduce quality and dimension
+          let attempts = 0;
+          while (currentBytes > maxSizeBytes && attempts < 10) {
+            attempts++;
+            if (quality > 0.45) {
+              quality -= 0.1;
+            } else {
+              // Scale down dimensions if quality is already low
+              width = Math.round(width * 0.85);
+              height = Math.round(height * 0.85);
+              canvas.width = width;
+              canvas.height = height;
+              ctx.imageSmoothingEnabled = true;
+              ctx.imageSmoothingQuality = 'high';
+              ctx.fillStyle = '#FFFFFF';
+              ctx.fillRect(0, 0, width, height);
+              ctx.drawImage(img, 0, 0, width, height);
+              quality = 0.75;
+            }
 
-  // Iterative compression loop
-  for (let attempt = 0; attempt < 8; attempt++) {
-    canvas.width = width;
-    canvas.height = height;
+            dataUrl = canvas.toDataURL(mimeType, quality);
+            currentBytes = calculateBase64Size(dataUrl);
+          }
 
-    // Fill white background for transparent PNGs
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, width, height);
-    ctx.drawImage(img, 0, 0, width, height);
+          const sizeKb = Math.round((currentBytes / 1024) * 10) / 10;
 
-    resultDataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve({
+            dataUrl,
+            sizeBytes: currentBytes,
+            sizeKb,
+            originalSizeKb,
+            width,
+            height,
+            format: mimeType,
+          });
+        } catch (err) {
+          reject(err);
+        }
+      };
 
-    // Approximate byte size from base64 string length
-    const base64Length = resultDataUrl.split(',')[1]?.length || 0;
-    const estimatedBytes = (base64Length * 3) / 4;
+      img.onerror = () => {
+        reject(new Error('ইমেজ ফাইলটি পড়তে ব্যর্থ হয়েছে।'));
+      };
 
-    if (estimatedBytes <= maxBytes || quality <= 0.2) {
-      break;
-    }
+      img.src = event.target?.result as string;
+    };
 
-    // Reduce quality or scale down dimensions if quality is already low
-    if (quality > 0.4) {
-      quality -= 0.15;
-    } else {
-      width = Math.round(width * 0.8);
-      height = Math.round(height * 0.8);
-    }
-  }
+    reader.onerror = () => {
+      reject(new Error('ফাইল রিড করতে ব্যর্থ হয়েছে।'));
+    };
 
-  return resultDataUrl;
+    reader.readAsDataURL(file);
+  });
+}
+
+function calculateBase64Size(base64String: string): number {
+  const padding = base64String.endsWith('==') ? 2 : base64String.endsWith('=') ? 1 : 0;
+  const base64Length = base64String.length - (base64String.indexOf(',') + 1);
+  return (base64Length * 3) / 4 - padding;
 }

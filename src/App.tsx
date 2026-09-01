@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PRODUCTS, CATEGORIES } from './data/products';
 import { Product, CartItem, DeliveryZone, Order } from './types';
-import { getProductsFromFirestore } from './lib/firebase';
+import { getProductsFromFirestore, subscribeToProducts } from './lib/firebase';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { ProductCatalog } from './components/ProductCatalog';
@@ -46,7 +46,7 @@ export default function App() {
   const [appointmentService, setAppointmentService] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Load products from Firestore
+  // Load products from Firestore & Real-Time Sync
   useEffect(() => {
     async function loadFirestoreProducts() {
       try {
@@ -60,6 +60,15 @@ export default function App() {
       }
     }
     loadFirestoreProducts();
+
+    const unsubscribe = subscribeToProducts((updatedProducts) => {
+      if (updatedProducts && updatedProducts.length > 0) {
+        setProducts(updatedProducts);
+        localStorage.setItem('tanu_products', JSON.stringify(updatedProducts));
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   // Helper to push history state when opening a modal or view
@@ -421,6 +430,7 @@ export default function App() {
               onAddToCart={handleAddToCart}
               onDirectOrder={handleDirectOrder}
               onToast={showToast}
+              onOpenTrackModal={(initialId) => handleOpenTrackModalWithId(initialId || '')}
             />
 
             {/* Security and Data Protection Section */}

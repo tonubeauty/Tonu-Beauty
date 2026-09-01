@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, 
   Search, 
@@ -13,7 +13,8 @@ import {
   PhoneCall, 
   Calendar,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  History
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Order } from '../types';
@@ -25,6 +26,77 @@ interface TrackOrderModalProps {
   initialOrderId?: string;
 }
 
+// Convert Bengali numerals to English numerals
+export function convertBnToEnDigits(str: string): string {
+  if (!str) return '';
+  const bnToEn: Record<string, string> = {
+    '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+    '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'
+  };
+  return str.replace(/[০-৯]/g, (d) => bnToEn[d] || d);
+}
+
+// Clean string for unified search comparison
+export function cleanQueryString(str: string): string {
+  if (!str) return '';
+  return convertBnToEnDigits(str)
+    .replace(/[\s\-_#,:;./\\]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+// Advanced flexible order matcher
+export function checkOrderMatchesQuery(order: Order, query: string): boolean {
+  if (!query || !query.trim()) return false;
+
+  const cleanQ = cleanQueryString(query);
+  if (!cleanQ) return false;
+
+  const cleanOrderId = cleanQueryString(order.orderId || '');
+  const cleanPhone = cleanQueryString(order.phone || '');
+  const cleanCustomer = (order.customerName || '').toLowerCase().trim();
+  const rawQNormalized = convertBnToEnDigits(query).toLowerCase().trim();
+
+  // 1. Order ID direct / substring match
+  if (cleanOrderId) {
+    if (cleanOrderId === cleanQ || cleanOrderId.includes(cleanQ) || cleanQ.includes(cleanOrderId)) {
+      return true;
+    }
+  }
+
+  // 2. Numeric-only match (e.g. user typed 123456 for TB-123456)
+  const orderDigitsOnly = cleanOrderId.replace(/\D/g, '');
+  const queryDigitsOnly = cleanQ.replace(/\D/g, '');
+  if (queryDigitsOnly.length >= 3 && orderDigitsOnly) {
+    if (orderDigitsOnly === queryDigitsOnly || orderDigitsOnly.includes(queryDigitsOnly) || queryDigitsOnly.includes(orderDigitsOnly)) {
+      return true;
+    }
+  }
+
+  // 3. Phone number match (supports with/without +88, 88, leading 0)
+  if (cleanPhone && queryDigitsOnly.length >= 4) {
+    const rawPhoneDigits = cleanPhone.replace(/\D/g, '');
+    const phoneNoLeadingZero = rawPhoneDigits.replace(/^0+|^880+|^88+/, '');
+    const queryNoLeadingZero = queryDigitsOnly.replace(/^0+|^880+|^88+/, '');
+
+    if (
+      rawPhoneDigits.includes(queryDigitsOnly) ||
+      queryDigitsOnly.includes(rawPhoneDigits) ||
+      (phoneNoLeadingZero && phoneNoLeadingZero.includes(queryNoLeadingZero)) ||
+      (queryNoLeadingZero && queryNoLeadingZero.includes(phoneNoLeadingZero))
+    ) {
+      return true;
+    }
+  }
+
+  // 4. Customer Name match
+  if (cleanCustomer && (cleanCustomer.includes(rawQNormalized) || rawQNormalized.includes(cleanCustomer))) {
+    return true;
+  }
+
+  return false;
+}
+
 export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
   isOpen,
   onClose,
@@ -32,99 +104,164 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState(initialOrderId);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
-  const [matchedOrders, setMatchedOrders] = useState<Order[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
 
-  // Subscribe to live orders from Firestore so status updates live!
+  // Helper to load all stored orders from all available storages
+  const loadAllOrdersPool = async () => {
+    const poolMap = new Map<string, Order>();
+
+    // 1. LocalStorage 'tanu_orders'
+    try {
+      const tanuSaved = localStorage.getItem('tanu_orders');
+      if (tanuSaved) {
+        const parsed: Order[] = JSON.parse(tanuSaved);
+        parsed.forEach((o) => { if (o?.orderId) poolMap.set(o.orderId, o); });
+      }
+    } catch (e) {
+      console.warn('Error reading tanu_orders', e);
+    }
+
+    // 2. LocalStorage 'deshibazar_orders'
+    try {
+      const deshiSaved = localStorage.getItem('deshibazar_orders');
+      if (deshiSaved) {
+        const parsed: Order[] = JSON.parse(deshiSaved);
+        parsed.forEach((o) => { if (o?.orderId) poolMap.set(o.orderId, o); });
+      }
+    } catch (e) {
+      console.warn('Error reading deshibazar_orders', e);
+    }
+
+    // 3. Firestore Orders
+    try {
+      const fsOrders = await getOrdersFromFirestore();
+      if (fsOrders && fsOrders.length > 0) {
+        fsOrders.forEach((o) => { if (o?.orderId) poolMap.set(o.orderId, o); });
+      }
+    } catch (e) {
+      console.warn('Error fetching Firestore orders', e);
+    }
+
+    // 4. Demo seed order (BD-88412) if pool is empty
+    if (poolMap.size === 0) {
+      const demoOrder: Order = {
+        orderId: 'TB-88412',
+        createdAt: new Date().toISOString(),
+        customerName: 'নুসরাত জাহান',
+        phone: '01302383795',
+        address: 'ডুবাইল, সেহড়াতৈল রোড, নাটিয়াপাড়া বাজার, দেলদুয়ার, টাঙ্গাইল',
+        district: 'টাঙ্গাইল',
+        deliveryZone: 'inside_dhaka',
+        items: [
+          {
+            productId: 'demo-1',
+            productTitle: 'CSA লেজার মেছতা ও ব্রণের দাগ রিমুভাল',
+            quantity: 1,
+            price: 2500,
+            image: 'https://images.unsplash.com/photo-1560750588-73207b1ef5b8?auto=format&fit=crop&w=400&q=80'
+          }
+        ],
+        subtotal: 2500,
+        deliveryFee: 0,
+        totalAmount: 2500,
+        paymentMethod: 'cash',
+        status: 'confirmed',
+        trackingHistory: [
+          {
+            status: 'confirmed',
+            titleBn: 'বুকিং সিরিয়াল গ্রহণ সম্পন্ন',
+            timestamp: 'আজ সকাল ১০:৩০',
+            descriptionBn: 'তনু বিউটি পার্লার ও লেজার সেন্টারে আপনার বুকিং তালিকাভুক্ত হয়েছে।',
+            completed: true
+          }
+        ]
+      };
+      poolMap.set(demoOrder.orderId, demoOrder);
+    }
+
+    const combinedList = Array.from(poolMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    setAllOrders(combinedList);
+    return combinedList;
+  };
+
+  // Real-time Firestore subscription & initial sync
   useEffect(() => {
     if (!isOpen) return;
+
+    loadAllOrdersPool();
+
     const unsubscribe = subscribeToOrders((orders) => {
       if (orders && orders.length > 0) {
-        setAllOrders(orders);
+        setAllOrders((prev) => {
+          const map = new Map<string, Order>();
+          prev.forEach((o) => { if (o?.orderId) map.set(o.orderId, o); });
+          orders.forEach((o) => { if (o?.orderId) map.set(o.orderId, o); });
+          return Array.from(map.values()).sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        });
       }
     });
-
-    // Also initial fetch
-    getOrdersFromFirestore().then((orders) => {
-      if (orders && orders.length > 0) {
-        setAllOrders(orders);
-      }
-    }).catch(console.error);
 
     return () => unsubscribe();
   }, [isOpen]);
 
-  // When allOrders or searchQuery updates, re-evaluate matchedOrders if active
-  useEffect(() => {
-    if (!isOpen) return;
-    if (searchQuery.trim() && allOrders.length > 0) {
-      filterOrders(searchQuery.trim(), allOrders);
-    }
-  }, [allOrders, isOpen]);
-
+  // Handle initialOrderId prop
   useEffect(() => {
     if (!isOpen) return;
     if (initialOrderId) {
       setSearchQuery(initialOrderId);
-      executeSearch(initialOrderId);
+      setHasSearched(true);
     }
   }, [initialOrderId, isOpen]);
 
-  const filterOrders = (q: string, sourceOrders: Order[]) => {
-    const cleanQ = q.replace(/[\s-]/g, '').toLowerCase();
-    const matches = sourceOrders.filter(
-      (o) =>
-        o.orderId.toLowerCase().includes(cleanQ) ||
-        o.phone.replace(/[\s-]/g, '').includes(cleanQ) ||
-        cleanQ.includes(o.phone.replace(/[\s-]/g, '')) ||
-        (o.customerName && o.customerName.toLowerCase().includes(cleanQ))
-    );
-    if (matches.length > 0) {
-      setMatchedOrders(matches);
-      setErrorMsg(null);
-    } else {
-      setMatchedOrders(null);
-      setErrorMsg('কোনো বুকিং বা অর্ডার পাওয়া যায়নি। অনুগ্রহ করে সঠিক মোবাইল নম্বর বা বুকিং আইডি লিখুন।');
-    }
-  };
+  // Compute matched orders dynamically based on current searchQuery
+  const matchedOrders = useMemo(() => {
+    const q = searchQuery.trim();
+    if (!q) return null;
+    return allOrders.filter((order) => checkOrderMatchesQuery(order, q));
+  }, [searchQuery, allOrders]);
 
-  const executeSearch = async (query: string) => {
-    const q = query.trim();
+  // Search submission handler (also falls back to server API if not found)
+  const handleSearchSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const q = searchQuery.trim();
     if (!q) return;
+
+    setHasSearched(true);
     setLoading(true);
     setErrorMsg(null);
 
     try {
-      // 1. Try local/synced Firestore list first
-      let currentPool = allOrders;
-      if (currentPool.length === 0) {
-        currentPool = await getOrdersFromFirestore();
-        setAllOrders(currentPool);
-      }
+      // 1. Refresh local & firestore pool
+      const freshPool = await loadAllOrdersPool();
+      const localMatches = freshPool.filter((order) => checkOrderMatchesQuery(order, q));
 
-      const cleanQ = q.replace(/[\s-]/g, '').toLowerCase();
-      let matches = currentPool.filter(
-        (o) =>
-          o.orderId.toLowerCase().includes(cleanQ) ||
-          o.phone.replace(/[\s-]/g, '').includes(cleanQ) ||
-          cleanQ.includes(o.phone.replace(/[\s-]/g, ''))
-      );
-
-      if (matches.length > 0) {
-        setMatchedOrders(matches);
+      if (localMatches.length > 0) {
         setLoading(false);
         return;
       }
 
-      // 2. Fallback to API
+      // 2. Fallback to API endpoint
       try {
         const response = await fetch(`/api/orders/track?query=${encodeURIComponent(q)}`);
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.orders && data.orders.length > 0) {
-            setMatchedOrders(data.orders);
+            setAllOrders((prev) => {
+              const map = new Map<string, Order>();
+              prev.forEach((o) => { if (o?.orderId) map.set(o.orderId, o); });
+              data.orders.forEach((o: Order) => { if (o?.orderId) map.set(o.orderId, o); });
+              return Array.from(map.values()).sort(
+                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              );
+            });
             setLoading(false);
             return;
           }
@@ -133,36 +270,12 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
         console.warn('API track fallback failed', apiErr);
       }
 
-      // 3. Fallback to localStorage
-      const saved = localStorage.getItem('tanu_orders');
-      if (saved) {
-        const localOrders: Order[] = JSON.parse(saved);
-        matches = localOrders.filter(
-          (o) =>
-            o.orderId.toLowerCase().includes(cleanQ) ||
-            o.phone.replace(/[\s-]/g, '').includes(cleanQ) ||
-            cleanQ.includes(o.phone.replace(/[\s-]/g, ''))
-        );
-        if (matches.length > 0) {
-          setMatchedOrders(matches);
-          setLoading(false);
-          return;
-        }
-      }
-
-      setMatchedOrders(null);
-      setErrorMsg('কোনো বুকিং বা অর্ডার রেকর্ড পাওয়া যায়নি। সঠিক মোবাইল নম্বর (যেমন: 017XXXXXXXX) বা আইডি দিয়ে চেষ্টা করুন।');
+      setErrorMsg('কোনো বুকিং বা অর্ডার রেকর্ড পাওয়া যায়নি। সঠিক মোবাইল নম্বর (যেমন: 01302383795) বা বুকিং আইডি (যেমন: TB-123456) দিয়ে চেষ্টা করুন।');
     } catch (err: any) {
-      setMatchedOrders(null);
       setErrorMsg(err.message || 'বুকিং ট্র্যাকিং লোড হতে সমস্যা হয়েছে।');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    executeSearch(searchQuery);
   };
 
   const handleCopyLink = (order: Order) => {
@@ -232,7 +345,7 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-300 font-normal mt-0.5">
-                মোবাইল নম্বর বা বুকিং আইডি লিখে রিয়েল-টাইম স্ট্যাটাস ও QR দেখুন
+                বুকিং আইডি (যেমন: TB-123456) বা মোবাইল নম্বর লিখে চেক করুন
               </p>
             </div>
           </div>
@@ -259,25 +372,59 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="যেমন: TB-123456 অথবা 01302383795"
+                  placeholder="যেমন: TB-123456 বা 123456 বা 01302383795"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setHasSearched(true);
+                    setErrorMsg(null);
+                  }}
                   className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none text-xs sm:text-sm text-slate-900 font-medium"
                 />
               </div>
               <button
                 type="submit"
                 disabled={loading}
-                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>চেক করুন</span>}
               </button>
             </div>
           </form>
 
+          {/* Quick Click Recent Bookings Chips (if available) */}
+          {allOrders.length > 0 && (
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500">
+                <History className="w-3 h-3 text-rose-500" />
+                <span>সাম্প্রতিক বুকিং আইডি (ক্লিক করে সরাসরি দেখুন):</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {allOrders.slice(0, 4).map((ord) => (
+                  <button
+                    key={ord.orderId}
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery(ord.orderId);
+                      setHasSearched(true);
+                      setErrorMsg(null);
+                    }}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg border font-semibold transition-all cursor-pointer ${
+                      searchQuery.trim().toLowerCase() === ord.orderId.toLowerCase()
+                        ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                        : 'bg-slate-100 hover:bg-rose-50 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    #{ord.orderId} ({ord.customerName ? ord.customerName.split(' ')[0] : 'বুকিং'})
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Error Alert */}
-          {errorMsg && (
-            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-2.5 text-xs text-amber-900">
+          {errorMsg && hasSearched && (!matchedOrders || matchedOrders.length === 0) && (
+            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-2.5 text-xs text-amber-900 animate-in fade-in">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold">তথ্য মেলেনি: </span>
@@ -287,13 +434,13 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
           )}
 
           {/* Orders Tracking Display */}
-          {matchedOrders && matchedOrders.length > 0 && (
-            <div className="space-y-5">
+          {matchedOrders && matchedOrders.length > 0 ? (
+            <div className="space-y-5 animate-in fade-in">
               <div className="flex items-center justify-between text-xs text-slate-500">
                 <span>পাওয়া গেছে: <b>{matchedOrders.length}</b> টি বুকিং / অর্ডার রেকর্ড</span>
                 <span className="text-emerald-700 font-medium flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                  সার্ভার থেকে স্বয়ংক্রিয়ভাবে আপডেট হচ্ছে
+                  সার্ভার থেকে লাইভ সিঙ্ক হচ্ছে
                 </span>
               </div>
 
@@ -301,14 +448,14 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                 const trackUrl = `${window.location.origin}${window.location.pathname}?track=${order.orderId}`;
 
                 return (
-                  <div key={order.orderId} className="bg-slate-50 rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4">
+                  <div key={order.orderId} className="bg-slate-50 rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4 shadow-xs">
                     
                     {/* Header: ID, Status, QR Code */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] uppercase font-bold text-slate-400">বুকিং আইডি:</span>
-                          <span className="text-base font-extrabold text-slate-900">{order.orderId}</span>
+                          <span className="text-base font-extrabold text-slate-900 font-mono">#{order.orderId}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-slate-500">বর্তমান অবস্থা:</span>
@@ -362,13 +509,13 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                       <div>
                         <span className="text-slate-400 block text-[11px]">গ্রাহক বিবরণ:</span>
                         <p className="font-bold text-slate-900 mt-0.5">{order.customerName}</p>
-                        <p className="text-slate-600 font-medium">{order.phone}</p>
+                        <p className="text-slate-600 font-medium font-mono">{order.phone}</p>
                         {order.address && <p className="text-slate-500 text-[11px] mt-0.5">{order.address}</p>}
                       </div>
                       <div>
                         <span className="text-slate-400 block text-[11px]">পেমেন্ট ও বিল তথ্য:</span>
                         <p className="font-bold text-slate-900 mt-0.5">
-                          মোট বিল: ৳{order.totalAmount.toLocaleString('bn-BD')}
+                          মোট বিল: ৳{(order.totalAmount || 0).toLocaleString('bn-BD')}
                         </p>
                         <p className="text-slate-600 text-[11px]">
                           পেমেন্ট মাধ্যম: {order.paymentMethod === 'cod' ? 'ক্যাশ অন ডেলিভারি' : order.paymentMethod === 'bkash' ? 'বিকাশ' : order.paymentMethod === 'nagad' ? 'নগদ' : 'ক্যাশ'}
@@ -447,10 +594,8 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                 );
               })}
             </div>
-          )}
-
-          {/* Default Help Hint */}
-          {!matchedOrders && !errorMsg && (
+          ) : !hasSearched || !searchQuery ? (
+            /* Default Help Hint */
             <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 text-center space-y-3">
               <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
                 <ShieldCheck className="w-6 h-6" />
@@ -458,19 +603,19 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
               <div className="space-y-1">
                 <h4 className="font-bold text-slate-900 text-sm">সহজ বুকিং ভেরিফিকেশন ও ট্র্যাকিং</h4>
                 <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                  বুকিং করার পর আপনার মোবাইল নম্বরে যে আইডি পাঠানো হয়েছে বা আপনার মোবাইল নম্বর লিখে উপরের বক্সে সার্চ করুন। লাইভ স্ট্যাটাস ও ভেরিফাইড QR কোড দেখতে পাবেন।
+                  বুকিং করার পর আপনার প্রাপ্ত বুকিং আইডি (যেমন: TB-123456 বা 123456) অথবা আপনার মোবাইল নম্বর উপরে লিখে চেক বাটনে চাপুন। সম্পূর্ণ তথ্য ও ভেরিফাইড QR কোড দেখতে পাবেন।
                 </p>
               </div>
 
               <div className="pt-2 flex items-center justify-center gap-2 text-xs text-slate-600">
                 <span>যেকোনো প্রয়োজনে সরাসরি কল করুন:</span>
-                <a href="tel:01302383795" className="font-bold text-rose-600 hover:underline flex items-center gap-1">
+                <a href="tel:01302383795" className="font-bold text-rose-600 hover:underline flex items-center gap-1 font-mono">
                   <PhoneCall className="w-3.5 h-3.5" />
                   <span>01302383795</span>
                 </a>
               </div>
             </div>
-          )}
+          ) : null}
 
         </div>
 
@@ -478,3 +623,4 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
     </div>
   );
 };
+

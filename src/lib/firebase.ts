@@ -129,13 +129,45 @@ export function subscribeToOrders(onUpdate: (orders: Order[]) => void) {
   }
 }
 
+// Save single product to Firestore
+export async function saveProductToFirestore(product: Product): Promise<boolean> {
+  try {
+    if (!db) return false;
+    const docRef = doc(db, PRODUCTS_COLLECTION, product.id);
+    await setDoc(docRef, {
+      ...product,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    return true;
+  } catch (err) {
+    console.error('Error saving product to Firestore:', err);
+    return false;
+  }
+}
+
+// Delete product from Firestore
+export async function deleteProductFromFirestore(productId: string): Promise<boolean> {
+  try {
+    if (!db) return false;
+    const docRef = doc(db, PRODUCTS_COLLECTION, productId);
+    await deleteDoc(docRef);
+    return true;
+  } catch (err) {
+    console.error('Error deleting product from Firestore:', err);
+    return false;
+  }
+}
+
 // Save products to Firestore
 export async function saveProductsToFirestore(products: Product[]): Promise<boolean> {
   try {
     if (!db) return false;
     for (const prod of products) {
       const docRef = doc(db, PRODUCTS_COLLECTION, prod.id);
-      await setDoc(docRef, prod, { merge: true });
+      await setDoc(docRef, {
+        ...prod,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
     }
     return true;
   } catch (err) {
@@ -157,5 +189,31 @@ export async function getProductsFromFirestore(): Promise<Product[]> {
   } catch (err) {
     console.error('Error fetching products from Firestore:', err);
     return [];
+  }
+}
+
+// Subscribe to real-time products updates
+export function subscribeToProducts(onUpdate: (products: Product[]) => void) {
+  try {
+    if (!db) return () => {};
+    const q = query(collection(db, PRODUCTS_COLLECTION));
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const products: Product[] = [];
+        snapshot.forEach((docSnap) => {
+          products.push(docSnap.data() as Product);
+        });
+        if (products.length > 0) {
+          onUpdate(products);
+        }
+      },
+      (error) => {
+        console.error('Firestore products snapshot listener error:', error);
+      }
+    );
+  } catch (err) {
+    console.error('Error setting up products snapshot listener:', err);
+    return () => {};
   }
 }

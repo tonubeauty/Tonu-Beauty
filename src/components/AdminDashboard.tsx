@@ -6,10 +6,12 @@ import {
   updateOrderStatusInFirestore,
   deleteOrderFromFirestore,
   saveOrderToFirestore,
+  saveProductToFirestore,
+  deleteProductFromFirestore,
   saveProductsToFirestore,
 } from '../lib/firebase';
-import { compressImageFileToMaxKB } from '../lib/imageCompressor';
 import { A4PrintInvoice } from './A4PrintInvoice';
+import { ServiceManagerModal } from './ServiceManagerModal';
 import {
   LayoutDashboard,
   ClipboardList,
@@ -41,7 +43,11 @@ import {
   MapPin,
   Calendar,
   Save,
-  QrCode
+  QrCode,
+  Edit2,
+  Check,
+  Layers,
+  Image as ImageIcon
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -118,21 +124,78 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Customer Statement Search State
   const [statementPhoneQuery, setStatementPhoneQuery] = useState('');
 
-  // Service Edit Form State
+  // Service & Package Management State
+  const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [serviceFormData, setServiceFormData] = useState({
-    id: '',
-    title: '',
-    titleBn: '',
-    category: 'csa_laser',
-    categoryBn: 'CSA লেজার ট্রিটমেন্ট',
-    price: 0,
-    originalPrice: 0,
-    descriptionBn: '',
-    imageUrl: 'https://images.unsplash.com/photo-1560750588-73207b1ef5b8?auto=format&fit=crop&w=800&q=80',
-    stockCount: 50,
-  });
-  const [isCompressingImage, setIsCompressingImage] = useState(false);
+  const [serviceSearchQuery, setServiceSearchQuery] = useState('');
+  const [serviceCategoryFilter, setServiceCategoryFilter] = useState('all');
+  const [isSyncingServices, setIsSyncingServices] = useState(false);
+
+  // Open modal to add a new service
+  const handleOpenAddService = () => {
+    setEditingProduct(null);
+    setIsServiceModalOpen(true);
+  };
+
+  // Open modal to edit an existing service
+  const handleOpenEditService = (prod: Product) => {
+    setEditingProduct(prod);
+    setIsServiceModalOpen(true);
+  };
+
+  // Save product to Firestore and update local state
+  const handleSaveProduct = async (productData: Product) => {
+    try {
+      // 1. Save to Firestore
+      await saveProductToFirestore(productData);
+
+      // 2. Update local state
+      const exists = products.some((p) => p.id === productData.id);
+      let updatedList: Product[];
+      if (exists) {
+        updatedList = products.map((p) => (p.id === productData.id ? productData : p));
+        onToast(`সার্ভিস "${productData.titleBn}" সফলভাবে আপডেট ও ফায়ারবেসে সেভ হয়েছে`);
+      } else {
+        updatedList = [productData, ...products];
+        onToast(`নতুন সার্ভিস "${productData.titleBn}" সফলভাবে ফায়ারবেসে যোগ হয়েছে`);
+      }
+
+      onUpdateProducts(updatedList);
+    } catch (err) {
+      console.error('Error saving product:', err);
+      onToast('সার্ভিস সেভ করতে সমস্যা হয়েছে।');
+      throw err;
+    }
+  };
+
+  // Delete product from Firestore and local state
+  const handleDeleteProduct = async (productId: string, titleBn: string) => {
+    if (window.confirm(`আপনি কি সত্যিই "${titleBn}" সার্ভিসটি স্থায়ীভাবে ডিলিট করতে চান?`)) {
+      try {
+        await deleteProductFromFirestore(productId);
+        const updatedList = products.filter((p) => p.id !== productId);
+        onUpdateProducts(updatedList);
+        onToast(`সার্ভিস "${titleBn}" ফায়ারবেস থেকে ডিলিট করা হয়েছে`);
+      } catch (err) {
+        console.error('Error deleting product:', err);
+        onToast('সার্ভিস ডিলিট করতে ব্যর্থ হয়েছে');
+      }
+    }
+  };
+
+  // Batch sync all services to Firestore
+  const handleSyncAllServices = async () => {
+    setIsSyncingServices(true);
+    try {
+      await saveProductsToFirestore(products);
+      onToast(`সকল (${products.length} টি) সার্ভিস সফলভাবে ফায়ারবেস ক্লাউডে সিঙ্ক করা হয়েছে`);
+    } catch (err) {
+      console.error('Failed to sync services:', err);
+      onToast('ফায়ারবেস সিঙ্ক করতে সমস্যা হয়েছে');
+    } finally {
+      setIsSyncingServices(false);
+    }
+  };
 
   // Initial Data Fetch & Firestore Real-Time Subscription
   useEffect(() => {
@@ -396,16 +459,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+// Convert Bengali numerals to English numerals
+function convertBnToEnDigits(str: string): string {
+  if (!str) return '';
+  const bnToEn: Record<string, string> = {
+    '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+    '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'
+  };
+  return str.replace(/[০-৯]/g, (d) => bnToEn[d] || d);
+}
+
+function cleanStr(str: string): string {
+  if (!str) return '';
+  return convertBnToEnDigits(str).replace(/[\s\-_#,:;./\\]/g, '').toLowerCase().trim();
+}
+
   // Filtered Orders List
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
-      const q = orderSearchQuery.toLowerCase().trim();
-      const matchQuery =
-        !q ||
-        order.orderId.toLowerCase().includes(q) ||
-        order.customerName.toLowerCase().includes(q) ||
-        order.phone.includes(q);
+      const rawQ = orderSearchQuery.trim();
+      if (!rawQ) {
+        return orderStatusFilter === 'all' || order.status === orderStatusFilter;
+      }
 
+      const cleanQ = cleanStr(rawQ);
+      const cleanOrderId = cleanStr(order.orderId || '');
+      const cleanPhone = cleanStr(order.phone || '');
+      const cleanName = (order.customerName || '').toLowerCase().trim();
+      const rawQNorm = convertBnToEnDigits(rawQ).toLowerCase().trim();
+
+      const queryDigits = cleanQ.replace(/\D/g, '');
+      const orderDigits = cleanOrderId.replace(/\D/g, '');
+      const phoneDigits = cleanPhone.replace(/\D/g, '');
+
+      const matchOrderId = cleanOrderId && (cleanOrderId.includes(cleanQ) || cleanQ.includes(cleanOrderId));
+      const matchDigits = queryDigits.length >= 3 && orderDigits && (orderDigits.includes(queryDigits) || queryDigits.includes(orderDigits));
+      const matchPhone = (cleanPhone && cleanPhone.includes(cleanQ)) || (queryDigits.length >= 4 && phoneDigits && (phoneDigits.includes(queryDigits) || queryDigits.includes(phoneDigits)));
+      const matchName = cleanName && (cleanName.includes(rawQNorm) || rawQNorm.includes(cleanName));
+
+      const matchQuery = matchOrderId || matchDigits || matchPhone || matchName;
       const matchStatus = orderStatusFilter === 'all' || order.status === orderStatusFilter;
       return matchQuery && matchStatus;
     });
@@ -413,13 +505,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Customer Statement Calculation based on search query
   const statementCustomerData = useMemo(() => {
-    const q = statementPhoneQuery.trim().replace(/[\s-]/g, '');
-    if (!q) return null;
+    const rawQ = statementPhoneQuery.trim();
+    if (!rawQ) return null;
 
-    const matchedOrders = orders.filter(o =>
-      o.phone.replace(/[\s-]/g, '').includes(q) ||
-      (o.customerName && o.customerName.toLowerCase().includes(q.toLowerCase()))
-    );
+    const cleanQ = cleanStr(rawQ);
+    const queryDigits = cleanQ.replace(/\D/g, '');
+    const rawQNorm = convertBnToEnDigits(rawQ).toLowerCase().trim();
+
+    const matchedOrders = orders.filter(o => {
+      const cleanPhone = cleanStr(o.phone || '');
+      const phoneDigits = cleanPhone.replace(/\D/g, '');
+      const cleanName = (o.customerName || '').toLowerCase().trim();
+
+      if (cleanPhone && cleanPhone.includes(cleanQ)) return true;
+      if (queryDigits.length >= 4 && phoneDigits && (phoneDigits.includes(queryDigits) || queryDigits.includes(phoneDigits))) return true;
+      if (cleanName && (cleanName.includes(rawQNorm) || rawQNorm.includes(cleanName))) return true;
+      return false;
+    });
 
     if (matchedOrders.length === 0) return null;
 
@@ -455,6 +557,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       servicesSummary: allServices,
     };
   }, [orders, statementPhoneQuery]);
+
+  // Filtered Services for Admin Services Management Tab
+  const filteredAdminProducts = useMemo(() => {
+    return products.filter((p) => {
+      if (serviceCategoryFilter !== 'all' && p.category !== serviceCategoryFilter) {
+        return false;
+      }
+      if (serviceSearchQuery.trim()) {
+        const q = serviceSearchQuery.toLowerCase().trim();
+        const matchBn = (p.titleBn || '').toLowerCase().includes(q);
+        const matchEn = (p.title || '').toLowerCase().includes(q);
+        const matchCat = (p.categoryBn || '').toLowerCase().includes(q);
+        const matchDesc = (p.descriptionBn || '').toLowerCase().includes(q);
+        return matchBn || matchEn || matchCat || matchDesc;
+      }
+      return true;
+    });
+  }, [products, serviceCategoryFilter, serviceSearchQuery]);
 
   // Save Parlour Settings
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -1560,37 +1680,221 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {activeTab === 'services' && (
           <div className="space-y-6">
             
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-bold text-slate-900">পার্লারের সার্ভিস ও প্যাকেজসমূহ</h2>
-                <span className="text-xs text-slate-500">মোট সার্ভিস: {products.length} টি</span>
+            {/* Header & Quick Action Buttons */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                      পার্লারের সার্ভিস ও প্যাকেজসমূহ
+                    </h2>
+                    <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 text-xs font-bold">
+                      মোট {products.length} টি
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    সার্ভিস ও প্যাকেজ সম্পাদনা (Edit), নতুন সার্ভিস যোগ ও ছবি অটো ২০০ KB-তে অপ্টিমাইজ করে ফায়ারবেসে ক্লাউড স্টোরেজ
+                  </p>
+                </div>
+
+                {/* Top Action Buttons */}
+                <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+                  <button
+                    onClick={handleSyncAllServices}
+                    disabled={isSyncingServices}
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                    title="সকল সার্ভিস ক্লাউড ফায়ারবেসে সিঙ্ক করুন"
+                  >
+                    {isSyncingServices ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                    ) : (
+                      <RefreshCw className="w-3.5 h-3.5 text-slate-600" />
+                    )}
+                    <span>ফায়ারবেস সিঙ্ক</span>
+                  </button>
+
+                  <button
+                    onClick={handleOpenAddService}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>নতুন সার্ভিস বা প্যাকেজ যোগ করুন</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {products.map(prod => (
-                  <div key={prod.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
-                    <div className="aspect-video bg-slate-200 rounded-lg overflow-hidden">
-                      <img src={prod.images[0]} alt={prod.titleBn} className="w-full h-full object-cover" />
+              {/* Quick Category / Search Filter Bar */}
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-2 border-t border-slate-100">
+                {/* Search Bar */}
+                <div className="sm:col-span-6 relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="সার্ভিসের নাম বা বিবরণ দিয়ে খুঁজুন..."
+                    value={serviceSearchQuery}
+                    onChange={(e) => setServiceSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-rose-500"
+                  />
+                  {serviceSearchQuery && (
+                    <button
+                      onClick={() => setServiceSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Category Dropdown Filter */}
+                <div className="sm:col-span-6 flex items-center gap-2 overflow-x-auto no-scrollbar">
+                  <select
+                    value={serviceCategoryFilter}
+                    onChange={(e) => setServiceCategoryFilter(e.target.value)}
+                    className="w-full py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:bg-white focus:ring-2 focus:ring-rose-500 text-slate-700"
+                  >
+                    <option value="all">-- সকল ক্যাটেগরি ({products.length} টি) --</option>
+                    <option value="csa-laser">সিএসএ লেজার ট্রিটমেন্ট</option>
+                    <option value="bridal-makeup">ব্রাইডাল মেকআপ ও সাজ</option>
+                    <option value="facial-skin">ফেসিয়াল ও স্কিন কেয়ার</option>
+                    <option value="hair-care">হেয়ার রিবন্ডিং ও কেয়ার</option>
+                    <option value="pedicure-manicure">পেডিকিউর ও ম্যানিকিউর</option>
+                    <option value="combo-packages">কম্বো প্যাকেজ ও অফার</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Services Grid Display */}
+            {filteredAdminProducts.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
+                <Sparkles className="w-10 h-10 text-slate-300 mx-auto" />
+                <h3 className="font-bold text-sm text-slate-800">কোনো সার্ভিস পাওয়া যায়নি</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  সার্চ ফিল্টারে কোনো ফলাফল মেলেনি অথবা কোনো সার্ভিস যুক্ত করা হয়নি।
+                </p>
+                <button
+                  onClick={handleOpenAddService}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>নতুন সার্ভিস তৈরি করুন</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredAdminProducts.map((prod) => (
+                  <div
+                    key={prod.id}
+                    className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs hover:shadow-md transition-shadow flex flex-col justify-between group"
+                  >
+                    {/* Top Image & Badges */}
+                    <div className="relative aspect-video bg-slate-100 overflow-hidden">
+                      <img
+                        src={prod.images[0] || 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&q=80&w=800'}
+                        alt={prod.titleBn}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                      />
+                      
+                      {/* Top Badges */}
+                      <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
+                        <span className="bg-slate-900/90 backdrop-blur-xs text-white font-bold text-[10px] px-2 py-0.5 rounded-md shadow-xs">
+                          {prod.categoryBn || 'পার্লার সার্ভিস'}
+                        </span>
+                        {prod.discountPercent > 0 && (
+                          <span className="bg-rose-600 text-white font-bold text-[10px] px-2 py-0.5 rounded-md shadow-xs">
+                            {prod.discountPercent}% ছাড়
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Image Size Optimization Tag */}
+                      <div className="absolute bottom-2 right-2 bg-emerald-950/80 backdrop-blur-xs text-emerald-300 text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs flex items-center gap-1">
+                        <Check className="w-2.5 h-2.5" />
+                        <span>≤ 200KB অপ্টিমাইজড</span>
+                      </div>
                     </div>
 
-                    <div>
-                      <span className="text-[10px] bg-rose-50 text-rose-700 font-semibold px-2 py-0.5 rounded">
-                        {prod.categoryBn}
-                      </span>
-                      <h4 className="font-bold text-sm text-slate-900 mt-1">{prod.titleBn}</h4>
-                      <p className="text-xs font-extrabold text-slate-900 mt-0.5">
-                        মূল্য: ৳{prod.price.toLocaleString('bn-BD')}
-                      </p>
-                    </div>
+                    {/* Content Body */}
+                    <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                      <div className="space-y-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="font-extrabold text-sm sm:text-base text-slate-900 leading-snug">
+                            {prod.titleBn}
+                          </h4>
+                        </div>
+                        {prod.title && prod.title !== prod.titleBn && (
+                          <p className="text-[11px] text-slate-500 font-medium truncate">
+                            {prod.title}
+                          </p>
+                        )}
+                        <p className="text-xs text-slate-600 line-clamp-2 pt-1">
+                          {prod.descriptionBn}
+                        </p>
+                      </div>
 
-                    <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-200">
-                      <span>স্টক / ক্যাপাসিটি: <b>{prod.stockCount}</b></span>
-                      <span className="text-emerald-700 font-medium">সক্রিয় সার্ভিস</span>
+                      {/* Pricing and Highlights */}
+                      <div className="space-y-2 pt-2 border-t border-slate-100">
+                        <div className="flex items-baseline justify-between">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-base font-extrabold text-slate-900">
+                              ৳{prod.price.toLocaleString('bn-BD')}
+                            </span>
+                            {prod.originalPrice > prod.price && (
+                              <span className="text-xs text-slate-400 line-through">
+                                ৳{prod.originalPrice.toLocaleString('bn-BD')}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            স্টক: <b>{prod.stockCount ?? 50}</b>
+                          </span>
+                        </div>
+
+                        {/* Badges Preview */}
+                        <div className="flex flex-wrap gap-1">
+                          {prod.isFeatured && (
+                            <span className="text-[9px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
+                              Featured
+                            </span>
+                          )}
+                          {prod.isBestSeller && (
+                            <span className="text-[9px] bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded font-bold">
+                              Best Seller
+                            </span>
+                          )}
+                          {prod.isNewArrival && (
+                            <span className="text-[9px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded font-bold">
+                              New Offer
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons: Edit and Delete */}
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          onClick={() => handleOpenEditService(prod)}
+                          className="py-2 px-3 bg-slate-100 hover:bg-rose-50 text-slate-800 hover:text-rose-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-slate-200"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-rose-600" />
+                          <span>এডিট করুন</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleDeleteProduct(prod.id, prod.titleBn)}
+                          className="py-2 px-3 bg-slate-50 hover:bg-rose-100/70 text-slate-600 hover:text-rose-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-slate-200"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                          <span>ডিলিট</span>
+                        </button>
+                      </div>
+
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
+            )}
 
           </div>
         )}
@@ -1658,6 +1962,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
       </main>
+
+      {/* Service Add / Edit Modal with Automatic 200KB Image Compressor */}
+      <ServiceManagerModal
+        isOpen={isServiceModalOpen}
+        onClose={() => setIsServiceModalOpen(false)}
+        productToEdit={editingProduct}
+        categories={categories}
+        onSave={handleSaveProduct}
+      />
 
       {/* A4 Printable Invoice Modal Component */}
       {printInvoiceOrder && (
