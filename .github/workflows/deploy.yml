@@ -27,10 +27,15 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Build project
         run: npm run build
+
+      - name: Prepare static files for GitHub Pages
+        run: |
+          touch ./dist/.nojekyll
+          cp ./dist/index.html ./dist/404.html
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
