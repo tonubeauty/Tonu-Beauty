@@ -1,7 +1,8 @@
-import React from 'react';
-import { X, Printer, Check, PhoneCall, MapPin, QrCode, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Printer, Check, PhoneCall, MapPin, QrCode, Sparkles, Lock, FileText } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Order } from '../types';
+import { generateOfflineReceiptText, getSecureReceiptUrl } from '../lib/receiptHelper';
 
 interface A4PrintInvoiceProps {
   order: Order;
@@ -24,11 +25,16 @@ export const A4PrintInvoice: React.FC<A4PrintInvoiceProps> = ({
     hours: 'সকাল ১০:০০ টা - রাত ৮:০০ টা',
   },
 }) => {
+  const [qrMode, setQrMode] = useState<'secure_link' | 'offline_text'>('secure_link');
+
   const handlePrint = () => {
     window.print();
   };
 
-  const trackUrl = `${window.location.origin}${window.location.pathname}?track=${order.orderId}`;
+  const secureReceiptUrl = getSecureReceiptUrl(order.orderId);
+  const offlineReceiptText = generateOfflineReceiptText(order, parlourInfo);
+  const activeQrValue = qrMode === 'offline_text' ? offlineReceiptText : secureReceiptUrl;
+
   const subtotal = order.subtotal || order.items.reduce((sum, it) => sum + (it.price * it.quantity), 0);
   const discount = order.discount || 0;
   const deliveryFee = order.deliveryFee || 0;
@@ -43,10 +49,41 @@ export const A4PrintInvoice: React.FC<A4PrintInvoiceProps> = ({
       <div className="relative bg-white rounded-2xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden flex flex-col my-auto max-h-[96vh] print:max-h-none print:h-auto print:border-none print:shadow-none print:rounded-none">
         
         {/* Top Floating Action Bar (Hidden during print) */}
-        <div className="bg-slate-900 text-white px-5 py-3 flex items-center justify-between print:hidden shrink-0">
+        <div className="bg-slate-900 text-white px-5 py-3 flex flex-wrap items-center justify-between gap-3 print:hidden shrink-0">
           <div className="flex items-center gap-2">
             <span className="font-bold text-sm">A4 প্রিন্ট ইনভয়েস প্রিভিউ</span>
             <span className="text-xs text-slate-400">({order.orderId})</span>
+          </div>
+
+          {/* QR Code Mode Selector */}
+          <div className="flex items-center gap-1.5 bg-slate-800 p-1 rounded-xl border border-slate-700 text-xs">
+            <span className="text-[11px] text-slate-400 pl-2 pr-1 font-medium hidden sm:inline">QR মোড:</span>
+            <button
+              type="button"
+              onClick={() => setQrMode('secure_link')}
+              className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer text-xs ${
+                qrMode === 'secure_link'
+                  ? 'bg-rose-600 text-white shadow-xs'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="স্ক্যান করলে শুধুমাত্র এই ডিজিটাল রিসিটটি সুরক্ষিতভাবে দেখাবে (ওয়েবসাইট লক থাকবে)"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>সিকিউর রিসিট লিংক</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setQrMode('offline_text')}
+              className={`px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer text-xs ${
+                qrMode === 'offline_text'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="স্ক্যান করলে কোনো ওয়েবসাইট ছাড়াই সরাসরি ক্যামেরা স্ক্রিনে মেমো টেক্সট ভেসে উঠবে"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>সরাসরি টেক্সট মেমো</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-3">
@@ -190,15 +227,30 @@ export const A4PrintInvoice: React.FC<A4PrintInvoiceProps> = ({
               {/* Left Column: QR Code & Verification Note */}
               <div className="col-span-7 flex items-center gap-4 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                 <div className="bg-white p-1.5 rounded-lg border border-slate-200 shrink-0">
-                  <QRCodeSVG value={trackUrl} size={84} level="M" />
+                  <QRCodeSVG 
+                    value={activeQrValue} 
+                    size={qrMode === 'offline_text' ? 88 : 84} 
+                    level={qrMode === 'offline_text' ? 'L' : 'M'} 
+                  />
                 </div>
                 <div className="space-y-1">
                   <span className="text-[11px] font-bold text-slate-900 flex items-center gap-1">
-                    <QrCode className="w-3.5 h-3.5 text-rose-600" />
-                    <span>ডিজিটাল ভেরিফিকেশন QR</span>
+                    {qrMode === 'offline_text' ? (
+                      <>
+                        <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>অফলাইন ডিজিটাল মেমো QR</span>
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="w-3.5 h-3.5 text-rose-600" />
+                        <span>সুরক্ষিত ডিজিটাল রিসিট QR</span>
+                      </>
+                    )}
                   </span>
                   <p className="text-[10px] text-slate-600 leading-tight">
-                    যেকোনো স্মার্টফোন ক্যামেরা দিয়ে এই QR স্ক্যান করে অনলাইনেই এই বুকিং বা বিলের সত্যতা যাচাই করুন।
+                    {qrMode === 'offline_text'
+                      ? 'যেকোনো ক্যামেরা দিয়ে স্ক্যান করলে ওয়েবসাইট ওপেন না হয়ে সরাসরি মেমোর পূর্ণ টেক্সট ভেসে উঠবে।'
+                      : 'স্ক্যান করলে শুধুমাত্র এই মেমোর অফিসিয়াল ভাউচারটি দেখতে পাবেন। মূল ওয়েবসাইট সম্পূর্ণ গোপন ও সুরক্ষিত।'}
                   </p>
                   <p className="text-[10px] font-mono text-slate-500 truncate max-w-[200px]">
                     ID: {order.orderId}

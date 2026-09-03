@@ -14,11 +14,13 @@ import {
   Calendar,
   Sparkles,
   RefreshCw,
-  History
+  History,
+  Lock
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Order } from '../types';
 import { getOrdersFromFirestore, subscribeToOrders } from '../lib/firebase';
+import { getSecureReceiptUrl } from '../lib/receiptHelper';
 
 interface TrackOrderModalProps {
   isOpen: boolean;
@@ -279,7 +281,7 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
   };
 
   const handleCopyLink = (order: Order) => {
-    const url = `${window.location.origin}${window.location.pathname}?track=${order.orderId}`;
+    const url = getSecureReceiptUrl(order.orderId);
     navigator.clipboard.writeText(url).then(() => {
       setCopiedOrderId(order.orderId);
       setTimeout(() => setCopiedOrderId(null), 2000);
@@ -445,7 +447,7 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
               </div>
 
               {matchedOrders.map((order) => {
-                const trackUrl = `${window.location.origin}${window.location.pathname}?track=${order.orderId}`;
+                const receiptUrl = getSecureReceiptUrl(order.orderId);
 
                 return (
                   <div key={order.orderId} className="bg-slate-50 rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4 shadow-xs">
@@ -470,7 +472,7 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                       <div className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-slate-200 self-start sm:self-auto shadow-2xs">
                         <div className="bg-white p-1 rounded-lg">
                           <QRCodeSVG 
-                            value={trackUrl} 
+                            value={receiptUrl} 
                             size={72} 
                             level="M" 
                             includeMargin={false}
@@ -478,11 +480,11 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                         </div>
                         <div className="space-y-1 text-left">
                           <div className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
-                            <QrCode className="w-3.5 h-3.5 text-rose-600" />
-                            <span>বুকিং QR কোড</span>
+                            <Lock className="w-3.5 h-3.5 text-rose-600" />
+                            <span>সুরক্ষিত রিসিট QR</span>
                           </div>
-                          <p className="text-[10px] text-slate-400 max-w-[110px] leading-tight">
-                            স্ক্যান করে সরাসরি লাইভ স্ট্যাটাস দেখুন
+                          <p className="text-[10px] text-slate-500 max-w-[125px] leading-tight">
+                            স্ক্যান করলে শুধুমাত্র মেমো দেখাবে (ওয়েবসাইট লক)
                           </p>
                           <button
                             onClick={() => handleCopyLink(order)}
@@ -491,12 +493,12 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                             {copiedOrderId === order.orderId ? (
                               <>
                                 <Check className="w-3 h-3 text-emerald-600" />
-                                <span className="text-emerald-700">লিংক কপি হয়েছে</span>
+                                <span className="text-emerald-700">রিসিট লিংক কপি হয়েছে</span>
                               </>
                             ) : (
                               <>
                                 <Copy className="w-3 h-3" />
-                                <span>লিংক কপি করুন</span>
+                                <span>রিসিট লিংক কপি</span>
                               </>
                             )}
                           </button>

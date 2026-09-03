@@ -17,11 +17,34 @@ import { FloatingMobileBar } from './components/FloatingMobileBar';
 import { TanuBeautySection } from './components/TanuBeautySection';
 import { BeautyAppointmentModal } from './components/BeautyAppointmentModal';
 import { AdminDashboard } from './components/AdminDashboard';
+import { IsolatedReceiptView } from './components/IsolatedReceiptView';
 import { Check, ShoppingBag, ShieldCheck, Truck } from 'lucide-react';
 
 export default function App() {
-  // Navigation View State: 'website' | 'admin'
-  const [currentView, setCurrentView] = useState<'website' | 'admin'>('website');
+  const [receiptOrderId, setReceiptOrderId] = useState<string>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get('receipt') || urlParams.get('voucher') || urlParams.get('memo') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  // Navigation View State: 'website' | 'admin' | 'receipt'
+  const [currentView, setCurrentView] = useState<'website' | 'admin' | 'receipt'>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('receipt') || urlParams.get('voucher') || urlParams.get('memo')) {
+        return 'receipt';
+      }
+      if (urlParams.get('admin') === 'true' || urlParams.get('admin') === '1') {
+        return 'admin';
+      }
+      return 'website';
+    } catch {
+      return 'website';
+    }
+  });
 
   // Load products from localStorage or default PRODUCTS
   const [products, setProducts] = useState<Product[]>(() => {
@@ -212,6 +235,13 @@ export default function App() {
     const handleUrlProduct = () => {
       try {
         const urlParams = new URLSearchParams(window.location.search);
+        const receiptParam = urlParams.get('receipt') || urlParams.get('voucher') || urlParams.get('memo');
+        if (receiptParam) {
+          setReceiptOrderId(receiptParam);
+          setCurrentView('receipt');
+          return;
+        }
+
         const productId = urlParams.get('product') || urlParams.get('p');
         const trackId = urlParams.get('track') || urlParams.get('order');
         const adminParam = urlParams.get('admin');
@@ -354,6 +384,10 @@ export default function App() {
   const scrollToCatalog = () => {
     scrollToTarget('#catalog-section', -70);
   };
+
+  if (currentView === 'receipt' && receiptOrderId) {
+    return <IsolatedReceiptView orderId={receiptOrderId} />;
+  }
 
   if (currentView === 'admin') {
     return (

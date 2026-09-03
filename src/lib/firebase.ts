@@ -5,6 +5,7 @@ import {
   doc,
   setDoc,
   getDocs,
+  getDoc,
   updateDoc,
   deleteDoc,
   query,
@@ -75,6 +76,22 @@ export async function getOrdersFromFirestore(): Promise<Order[]> {
   } catch (err) {
     console.error('Error fetching orders from Firestore:', err);
     return [];
+  }
+}
+
+// Fetch single order by orderId from Firestore
+export async function getSingleOrderFromFirestore(orderId: string): Promise<Order | null> {
+  try {
+    if (!db) return null;
+    const docRef = doc(db, ORDERS_COLLECTION, orderId);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data() as Order;
+    }
+    return null;
+  } catch (err) {
+    console.error('Error fetching single order from Firestore:', err);
+    return null;
   }
 }
 
