@@ -9,6 +9,8 @@ import {
   saveProductToFirestore,
   deleteProductFromFirestore,
   saveProductsToFirestore,
+  saveAppSettingsToFirestore,
+  subscribeToAppSettings,
 } from '../lib/firebase';
 import { A4PrintInvoice } from './A4PrintInvoice';
 import { ServiceManagerModal } from './ServiceManagerModal';
@@ -46,6 +48,8 @@ import {
   Calendar,
   Save,
   QrCode,
+  Globe,
+  Smartphone,
   Edit2,
   Check,
   Layers,
@@ -110,6 +114,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       };
     }
   });
+
+  // QR Code View Option (On = Text Memo with no URL, Off = Receipt URL)
+  const [qrTextMemoEnabled, setQrTextMemoEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('tanu_qr_text_memo');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
+  const [isUpdatingQrOption, setIsUpdatingQrOption] = useState(false);
 
   // Manual Billing Form State
   const [billCustomerPhone, setBillCustomerPhone] = useState('');
@@ -264,6 +279,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onToast('এডমিন প্যানেল থেকে সফলভাবে লগআউট করা হয়েছে');
     onBackToWebsite();
   };
+
+  // Subscribe to real-time app settings from Firestore
+  useEffect(() => {
+    const unsubSettings = subscribeToAppSettings((settings) => {
+      if (typeof settings.qrTextMemoEnabled === 'boolean') {
+        setQrTextMemoEnabled(settings.qrTextMemoEnabled);
+        localStorage.setItem('tanu_qr_text_memo', JSON.stringify(settings.qrTextMemoEnabled));
+      }
+      if (settings.parlourInfo) {
+        setParlourInfo(settings.parlourInfo);
+        localStorage.setItem('tanu_parlour_info', JSON.stringify(settings.parlourInfo));
+      }
+    });
+
+    return () => {
+      unsubSettings();
+    };
+  }, []);
 
   // Smart Autofill when typing Customer Phone Number in Billing Tab
   useEffect(() => {
@@ -593,10 +626,45 @@ function cleanStr(str: string): string {
   }, [products, adminDivisionFilter, serviceCategoryFilter, serviceSearchQuery]);
 
   // Save Parlour Settings
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem('tanu_parlour_info', JSON.stringify(parlourInfo));
-    onToast('পার্লার তথ্য সফলভাবে সংরক্ষিত হয়েছে');
+    try {
+      await saveAppSettingsToFirestore({
+        parlourInfo,
+        qrTextMemoEnabled,
+      });
+      onToast('পার্লার তথ্য ও সেটিংস সফলভাবে ক্লাউড ফায়ারবেসে সংরক্ষিত হয়েছে');
+    } catch {
+      onToast('পার্লার তথ্য সংরক্ষিত হয়েছে');
+    }
+  };
+
+  // Toggle QR Code View Option (On = Text memo with no URL, Off = Receipt URL)
+  const handleToggleQrMode = async (enabled: boolean) => {
+    setQrTextMemoEnabled(enabled);
+    localStorage.setItem('tanu_qr_text_memo', JSON.stringify(enabled));
+    setIsUpdatingQrOption(true);
+    try {
+      const success = await saveAppSettingsToFirestore({
+        qrTextMemoEnabled: enabled,
+        parlourInfo,
+      });
+      if (success) {
+        onToast(
+          enabled
+            ? '✅ QR কোড ভিউ "On": সরাসরি টেক্সট মেমো মোড চালু হয়েছে (URL লুকানো থাকবে)'
+            : '🌐 QR কোড ভিউ "Off": সুরক্ষিত রিসিট URL মোড চালু হয়েছে'
+        );
+      } else {
+        onToast('লোকাল সেভ হয়েছে, তবে ফায়ারবেস ক্লাউডে সিঙ্ক নিশ্চিত করা যায়নি');
+      }
+    } catch (err) {
+      console.error('Error saving QR view setting:', err);
+      onToast('সেটিংস পরিবর্তন সেভ করার সময় সমস্যা হয়েছে');
+    } finally {
+      setIsUpdatingQrOption(false);
+    }
   };
 
   // If not authenticated, show Login Screen with 3795 code prompt
@@ -1985,61 +2053,210 @@ function cleanStr(str: string): string {
         {/* TAB 6: SETTINGS */}
         {/* ========================================================================= */}
         {activeTab === 'settings' && (
-          <div className="max-w-2xl bg-white rounded-2xl border border-slate-200 p-6 space-y-6">
-            <div className="space-y-0.5">
-              <h2 className="text-base font-bold text-slate-900">পার্লার ও ইনভয়েস সেটিংস</h2>
-              <p className="text-xs text-slate-500">ইনভয়েস এবং ওয়েবসাইটে প্রদর্শিত তথ্য পরিবর্তন করুন।</p>
+          <div className="max-w-3xl space-y-6">
+            
+            {/* QR Code View Option (Firebase Synced) */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600">
+                      <QrCode className="w-4 h-4" />
+                    </div>
+                    <h2 className="text-base font-bold text-slate-900">QR code View Option (কিউআর কোড ভিউ অপশন)</h2>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    কিউআর কোড স্ক্যান করলে গ্রাহকরা কীভাবে মেমো দেখতে পাবেন তা নিয়ন্ত্রণ করুন।
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200 rounded-full text-[11px] font-semibold text-emerald-700 self-start sm:self-auto">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>🔥 ফায়ারবেস লাইভ ক্লাউড কানেক্টেড</span>
+                </div>
+              </div>
+
+              {/* Toggle Switch Banner */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[11px] uppercase tracking-wider font-extrabold text-slate-400 block">
+                      বর্তমান কিউআর কোড মোড:
+                    </span>
+                    <div className="flex items-center gap-2 mt-1">
+                      {qrTextMemoEnabled ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-600 text-white shadow-xs">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>On (সরাসরি টেক্সট মেমো - URL লুকানো)</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-slate-700 text-white shadow-xs">
+                          <Globe className="w-3.5 h-3.5" />
+                          <span>Off (সুরক্ষিত রিসিট URL লিংক)</span>
+                        </span>
+                      )}
+
+                      {isUpdatingQrOption && (
+                        <span className="text-xs text-rose-600 flex items-center gap-1 font-medium">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ক্লাউডে সেভ হচ্ছে...
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Fast Toggle Switch Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleQrMode(!qrTextMemoEnabled)}
+                    disabled={isUpdatingQrOption}
+                    className={`py-2.5 px-5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm ${
+                      qrTextMemoEnabled
+                        ? 'bg-slate-900 hover:bg-slate-800 text-white'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    }`}
+                  >
+                    {qrTextMemoEnabled ? (
+                      <>
+                        <Globe className="w-4 h-4" />
+                        <span>Off করুন (URL মোডে নিতে)</span>
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="w-4 h-4" />
+                        <span>On করুন (টেক্সট মেমো মোডে নিতে)</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Option 1 & Option 2 Selection Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                  
+                  {/* Card On: Text Memo */}
+                  <div
+                    onClick={() => handleToggleQrMode(true)}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer text-left relative ${
+                      qrTextMemoEnabled
+                        ? 'border-emerald-500 bg-white shadow-md ring-2 ring-emerald-500/20'
+                        : 'border-slate-200 bg-white/60 hover:bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-extrabold text-xs">
+                        ON
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        🔒 URL ১০০% হাইড
+                      </span>
+                    </div>
+                    <h3 className="font-extrabold text-sm text-slate-900 mt-2">সরাসরি টেক্সট মেমো</h3>
+                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                      স্ক্যান করলে কোনো ওয়েবসাইট বা লিঙ্ক ওপেন হবে না। সরাসরি স্ক্রিনে ক্যাশ মেমোর টেক্সট বিবরণ (পণ্য তালিকা, বিল ও বাকি) ভেসে উঠবে।
+                    </p>
+                    <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">গ্রাহক অভিজ্ঞতা:</span>
+                      <span className="font-bold text-emerald-700">অফলাইন ও নিরবচ্ছিন্ন</span>
+                    </div>
+                  </div>
+
+                  {/* Card Off: URL */}
+                  <div
+                    onClick={() => handleToggleQrMode(false)}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer text-left relative ${
+                      !qrTextMemoEnabled
+                        ? 'border-rose-500 bg-white shadow-md ring-2 ring-rose-500/20'
+                        : 'border-slate-200 bg-white/60 hover:bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-extrabold text-xs">
+                        OFF
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                        🌐 ওয়েব ডিজিটাল ভাউচার
+                      </span>
+                    </div>
+                    <h3 className="font-extrabold text-sm text-slate-900 mt-2">সুরক্ষিত রিসিট URL লিংক</h3>
+                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                      স্ক্যান করলে ব্রাউজারে অফিসিয়াল ডিজিটাল রিসিট পেজ ওপেন হবে। (মূল ওয়েবসাইটের শপ ও মেনু সম্পূর্ণ লক থাকবে)।
+                    </p>
+                    <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">গ্রাহক অভিজ্ঞতা:</span>
+                      <span className="font-bold text-slate-700">ডিজিটাল ওয়েব ভাউচার</span>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Real-time sync note */}
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <b>রিয়েল-টাইম ফায়ারবেস কার্যকর:</b> আপনি এখানে <b>On</b> বা <b>Off</b> এ ক্লিক করার সাথে সাথে ফায়ারবেস ক্লাউডে সংরক্ষিত হচ্ছে। অন্য সকল গ্রাহক বা ইউজাররা সাথে সাথে আপনার নির্ধারিত অপশন অনুযায়ী সেবা পাবে।
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <form onSubmit={handleSaveSettings} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">পার্লারের পূর্ণ নাম:</label>
-                <input
-                  type="text"
-                  value={parlourInfo.branchName}
-                  onChange={(e) => setParlourInfo({ ...parlourInfo, branchName: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none"
-                />
+            {/* Parlour Info Settings Form */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-xs">
+              <div className="space-y-0.5 border-b border-slate-100 pb-3">
+                <h2 className="text-base font-bold text-slate-900">পার্লার ও ইনভয়েস সাধারণ তথ্য</h2>
+                <p className="text-xs text-slate-500">ইনভয়েস এবং ওয়েবসাইটে প্রদর্শিত নাম, ঠিকানা ও যোগাযোগের তথ্য।</p>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">হটলাইন নম্বর:</label>
-                <input
-                  type="text"
-                  value={parlourInfo.hotline}
-                  onChange={(e) => setParlourInfo({ ...parlourInfo, hotline: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono outline-none"
-                />
-              </div>
+              <form onSubmit={handleSaveSettings} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">পার্লারের পূর্ণ নাম:</label>
+                  <input
+                    type="text"
+                    value={parlourInfo.branchName}
+                    onChange={(e) => setParlourInfo({ ...parlourInfo, branchName: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none focus:bg-white focus:ring-1 focus:ring-rose-500"
+                  />
+                </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">ঠিকানা:</label>
-                <input
-                  type="text"
-                  value={parlourInfo.address}
-                  onChange={(e) => setParlourInfo({ ...parlourInfo, address: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none"
-                />
-              </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">হটলাইন নম্বর:</label>
+                  <input
+                    type="text"
+                    value={parlourInfo.hotline}
+                    onChange={(e) => setParlourInfo({ ...parlourInfo, hotline: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono outline-none focus:bg-white focus:ring-1 focus:ring-rose-500"
+                  />
+                </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">খোলা থাকার সময়সূচি:</label>
-                <input
-                  type="text"
-                  value={parlourInfo.hours}
-                  onChange={(e) => setParlourInfo({ ...parlourInfo, hours: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none"
-                />
-              </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">ঠিকানা:</label>
+                  <input
+                    type="text"
+                    value={parlourInfo.address}
+                    onChange={(e) => setParlourInfo({ ...parlourInfo, address: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none focus:bg-white focus:ring-1 focus:ring-rose-500"
+                  />
+                </div>
 
-              <button
-                type="submit"
-                className="py-2.5 px-5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>সেটিংস সংরক্ষণ করুন</span>
-              </button>
-            </form>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">খোলা থাকার সময়সূচি:</label>
+                  <input
+                    type="text"
+                    value={parlourInfo.hours}
+                    onChange={(e) => setParlourInfo({ ...parlourInfo, hours: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none focus:bg-white focus:ring-1 focus:ring-rose-500"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="py-2.5 px-5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>সেটিংস সংরক্ষণ করুন (Save All)</span>
+                </button>
+              </form>
+            </div>
+
           </div>
         )}
 
@@ -2059,6 +2276,7 @@ function cleanStr(str: string): string {
         <A4PrintInvoice
           order={printInvoiceOrder}
           onClose={() => setPrintInvoiceOrder(null)}
+          defaultQrMode={qrTextMemoEnabled ? 'offline_text' : 'secure_link'}
           parlourInfo={parlourInfo}
         />
       )}

@@ -7,6 +7,7 @@ import { generateOfflineReceiptText, getSecureReceiptUrl } from '../lib/receiptH
 interface A4PrintInvoiceProps {
   order: Order;
   onClose: () => void;
+  defaultQrMode?: 'secure_link' | 'offline_text';
   parlourInfo?: {
     branchName: string;
     hotline: string;
@@ -18,6 +19,7 @@ interface A4PrintInvoiceProps {
 export const A4PrintInvoice: React.FC<A4PrintInvoiceProps> = ({
   order,
   onClose,
+  defaultQrMode,
   parlourInfo = {
     branchName: 'তনু বিউটি পার্লার এন্ড লেজার সেন্টার',
     hotline: '01302383795',
@@ -25,7 +27,18 @@ export const A4PrintInvoice: React.FC<A4PrintInvoiceProps> = ({
     hours: 'সকাল ১০:০০ টা - রাত ৮:০০ টা',
   },
 }) => {
-  const [qrMode, setQrMode] = useState<'secure_link' | 'offline_text'>('secure_link');
+  const [qrMode, setQrMode] = useState<'secure_link' | 'offline_text'>(() => {
+    if (defaultQrMode) return defaultQrMode;
+    try {
+      const saved = localStorage.getItem('tanu_qr_text_memo');
+      if (saved !== null) {
+        return JSON.parse(saved) ? 'offline_text' : 'secure_link';
+      }
+    } catch {
+      // fallback
+    }
+    return 'offline_text';
+  });
 
   const handlePrint = () => {
     window.print();

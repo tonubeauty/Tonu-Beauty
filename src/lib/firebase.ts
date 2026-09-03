@@ -38,6 +38,19 @@ export const db = dbInstance;
 
 const ORDERS_COLLECTION = 'orders';
 const PRODUCTS_COLLECTION = 'products';
+const SETTINGS_COLLECTION = 'settings';
+const SETTINGS_DOC_ID = 'app_config';
+
+export interface AppSettings {
+  qrTextMemoEnabled: boolean; // true = On (সরাসরি টেক্সট মেমো, URL বিহীন), false = Off (ওয়েবসাইট রিসিট URL)
+  parlourInfo?: {
+    branchName: string;
+    hotline: string;
+    address: string;
+    hours: string;
+  };
+  updatedAt?: string;
+}
 
 // Utility to clean undefined fields before saving to Firestore
 function cleanForFirestore<T>(data: T): any {
@@ -242,3 +255,59 @@ export function subscribeToProducts(onUpdate: (products: Product[]) => void) {
     return () => {};
   }
 }
+
+// Save app settings (QR code view option & parlour info) to Firestore
+export async function saveAppSettingsToFirestore(settings: Partial<AppSettings>): Promise<boolean> {
+  try {
+    if (!db) return false;
+    const docRef = doc(db, SETTINGS_COLLECTION, SETTINGS_DOC_ID);
+    const sanitized = cleanForFirestore({
+      ...settings,
+      updatedAt: new Date().toISOString(),
+    });
+    await setDoc(docRef, sanitized, { merge: true });
+    return true;
+  } catch (err) {
+    console.error('Error saving app settings to Firestore:', err);
+    return false;
+  }
+}
+
+// Get app settings from Firestore
+export async function getAppSettingsFromFirestore(): Promise<AppSettings | null> {
+  try {
+    if (!db) return null;
+    const docRef = doc(db, SETTINGS_COLLECTION, SETTINGS_DOC_ID);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data() as AppSettings;
+    }
+    return null;
+  } catch (err) {
+    console.error('Error fetching app settings from Firestore:', err);
+    return null;
+  }
+}
+
+// Real-time listener for app settings
+export function subscribeToAppSettings(onUpdate: (settings: AppSettings) => void) {
+  try {
+    if (!db) return () => {};
+    const docRef = doc(db, SETTINGS_COLLECTION, SETTINGS_DOC_ID);
+    return onSnapshot(
+      docRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          onUpdate(docSnap.data() as AppSettings);
+        }
+      },
+      (error) => {
+        console.error('Firestore app settings snapshot listener error:', error);
+      }
+    );
+  } catch (err) {
+    console.error('Error setting up app settings listener:', err);
+    return () => {};
+  }
+}
+

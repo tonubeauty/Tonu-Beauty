@@ -15,12 +15,13 @@ import {
   Sparkles,
   RefreshCw,
   History,
-  Lock
+  Lock,
+  FileText
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Order } from '../types';
-import { getOrdersFromFirestore, subscribeToOrders } from '../lib/firebase';
-import { getSecureReceiptUrl } from '../lib/receiptHelper';
+import { getOrdersFromFirestore, subscribeToOrders, subscribeToAppSettings } from '../lib/firebase';
+import { getSecureReceiptUrl, generateOfflineReceiptText, DEFAULT_PARLOUR_INFO, ReceiptParlourInfo } from '../lib/receiptHelper';
 
 interface TrackOrderModalProps {
   isOpen: boolean;
@@ -110,6 +111,25 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+
+  // App settings for QR code mode (Text memo vs URL) synced with Firestore
+  const [qrTextMemoEnabled, setQrTextMemoEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('tanu_qr_text_memo');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const [parlourInfo, setParlourInfo] = useState<ReceiptParlourInfo>(() => {
+    try {
+      const saved = localStorage.getItem('tanu_parlour_info');
+      return saved ? JSON.parse(saved) : DEFAULT_PARLOUR_INFO;
+    } catch {
+      return DEFAULT_PARLOUR_INFO;
+    }
+  });
 
   // Helper to load all stored orders from all available storages
   const loadAllOrdersPool = async () => {
@@ -211,7 +231,21 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
       }
     });
 
-    return () => unsubscribe();
+    const unsubSettings = subscribeToAppSettings((settings) => {
+      if (typeof settings.qrTextMemoEnabled === 'boolean') {
+        setQrTextMemoEnabled(settings.qrTextMemoEnabled);
+        localStorage.setItem('tanu_qr_text_memo', JSON.stringify(settings.qrTextMemoEnabled));
+      }
+      if (settings.parlourInfo) {
+        setParlourInfo(settings.parlourInfo);
+        localStorage.setItem('tanu_parlour_info', JSON.stringify(settings.parlourInfo));
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      unsubSettings();
+    };
   }, [isOpen]);
 
   // Handle initialOrderId prop
@@ -281,8 +315,11 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
   };
 
   const handleCopyLink = (order: Order) => {
-    const url = getSecureReceiptUrl(order.orderId);
-    navigator.clipboard.writeText(url).then(() => {
+    const contentToCopy = qrTextMemoEnabled
+      ? generateOfflineReceiptText(order, parlourInfo)
+      : getSecureReceiptUrl(order.orderId);
+
+    navigator.clipboard.writeText(contentToCopy).then(() => {
       setCopiedOrderId(order.orderId);
       setTimeout(() => setCopiedOrderId(null), 2000);
     });
@@ -448,6 +485,8 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
 
               {matchedOrders.map((order) => {
                 const receiptUrl = getSecureReceiptUrl(order.orderId);
+                const offlineReceiptText = generateOfflineReceiptText(order, parlourInfo);
+                const activeQrValue = qrTextMemoEnabled ? offlineReceiptText : receiptUrl;
 
                 return (
                   <div key={order.orderId} className="bg-slate-50 rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4 shadow-xs">
@@ -472,19 +511,30 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                       <div className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-slate-200 self-start sm:self-auto shadow-2xs">
                         <div className="bg-white p-1 rounded-lg">
                           <QRCodeSVG 
-                            value={receiptUrl} 
-                            size={72} 
-                            level="M" 
+                            value={activeQrValue} 
+                            size={qrTextMemoEnabled ? 80 : 72} 
+                            level={qrTextMemoEnabled ? 'L' : 'M'} 
                             includeMargin={false}
                           />
                         </div>
                         <div className="space-y-1 text-left">
                           <div className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
-                            <Lock className="w-3.5 h-3.5 text-rose-600" />
-                            <span>সুরক্ষিত রিসিট QR</span>
+                            {qrTextMemoEnabled ? (
+                              <>
+                                <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                                <span className="text-emerald-800">টেক্সট মেমো QR</span>
+                              </>
+                            ) : (
+                              <>
+                                <Lock className="w-3.5 h-3.5 text-rose-600" />
+                                <span>সুরক্ষিত রিসিট QR</span>
+                              </>
+                            )}
                           </div>
-                          <p className="text-[10px] text-slate-500 max-w-[125px] leading-tight">
-                            স্ক্যান করলে শুধুমাত্র মেমো দেখাবে (ওয়েবসাইট লক)
+                          <p className="text-[10px] text-slate-500 max-w-[130px] leading-tight">
+                            {qrTextMemoEnabled
+                              ? 'স্ক্যান করলে সরাসরি মেমোর টেক্সট আসবে (URL বিহীন)'
+                              : 'স্ক্যান করলে শুধুমাত্র মেমো দেখাবে (ওয়েবসাইট লক)'}
                           </p>
                           <button
                             onClick={() => handleCopyLink(order)}
@@ -493,12 +543,16 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                             {copiedOrderId === order.orderId ? (
                               <>
                                 <Check className="w-3 h-3 text-emerald-600" />
-                                <span className="text-emerald-700">রিসিট লিংক কপি হয়েছে</span>
+                                <span className="text-emerald-700">
+                                  {qrTextMemoEnabled ? 'মেমো টেক্সট কপি হয়েছে' : 'রিসিট লিংক কপি হয়েছে'}
+                                </span>
                               </>
                             ) : (
                               <>
                                 <Copy className="w-3 h-3" />
-                                <span>রিসিট লিংক কপি</span>
+                                <span>
+                                  {qrTextMemoEnabled ? 'মেমো টেক্সট কপি' : 'রিসিট লিংক কপি'}
+                                </span>
                               </>
                             )}
                           </button>

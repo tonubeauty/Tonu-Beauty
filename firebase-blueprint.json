@@ -23,6 +23,15 @@
         "price": { "type": "number" },
         "category": { "type": "string" }
       }
+    },
+    "settings": {
+      "title": "System and Parlour Settings",
+      "description": "Global configuration including QR code view mode (text memo vs URL) and parlour details",
+      "properties": {
+        "id": { "type": "string" },
+        "qrTextMemoEnabled": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      }
     }
   }
 }

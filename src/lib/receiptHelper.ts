@@ -7,7 +7,7 @@ export interface ReceiptParlourInfo {
   hours?: string;
 }
 
-const DEFAULT_PARLOUR_INFO: ReceiptParlourInfo = {
+export const DEFAULT_PARLOUR_INFO: ReceiptParlourInfo = {
   branchName: 'তনু বিউটি পার্লার এন্ড লেজার সেন্টার',
   hotline: '01302383795',
   address: 'ডুবাইল, সেহড়াতৈল রোড, নাটিয়াপাড়া বাজার, দেলদুয়ার, টাঙ্গাইল',
