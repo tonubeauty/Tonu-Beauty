@@ -130,8 +130,8 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Main Navigation Bar */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-14 sm:h-16 gap-2 sm:gap-4">
+      <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between min-h-[3.5rem] sm:h-16 py-1 sm:py-0 gap-1.5 sm:gap-4">
           
           {/* Brand Logo */}
           <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
@@ -147,17 +147,18 @@ export const Header: React.FC<HeaderProps> = ({
               id="header-institution-brand"
               href="#"
               onClick={handleBrandClick}
-              className="flex items-center gap-2 group cursor-pointer min-w-0"
+              className="flex items-center gap-1.5 sm:gap-2 group cursor-pointer min-w-0"
               title="হোম পেজে যান"
             >
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-rose-600 to-rose-700 flex items-center justify-center text-white font-bold text-sm sm:text-base shadow-xs group-hover:bg-rose-700 transition-colors shrink-0">
+              <div className="w-7 h-7 xs:w-8 xs:h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-rose-600 to-rose-700 flex items-center justify-center text-white font-bold text-xs sm:text-base shadow-xs group-hover:bg-rose-700 transition-colors shrink-0">
                 তনু
               </div>
               <div className="min-w-0">
-                <span className="text-xs sm:text-base md:text-lg font-bold text-slate-900 block leading-tight tracking-tight truncate">
-                  তনু বিউটি পার্লার <span className="text-rose-600 font-medium hidden sm:inline">& লেজার সেন্টার</span>
+                <span className="text-[11px] xs:text-xs sm:text-base md:text-lg font-bold text-slate-900 block leading-tight tracking-tight">
+                  <span>তনু বিউটি পার্লার</span>{' '}
+                  <span className="text-rose-600 font-semibold inline whitespace-nowrap">& লেজার সেন্টার</span>
                 </span>
-                <span className="text-[10px] sm:text-[11px] text-slate-500 font-normal block leading-none mt-0.5 truncate">
+                <span className="text-[9px] sm:text-[11px] text-slate-500 font-normal block leading-none mt-0.5 truncate">
                   দেলদুয়ার, টাঙ্গাইল
                 </span>
               </div>
@@ -276,7 +277,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
                 <div>
                   <h3 className="font-bold text-sm text-slate-900 leading-tight">
-                    তনু বিউটি পার্লার ও লেজার
+                    তনু বিউটি পার্লার & লেজার সেন্টার
                   </h3>
                   <span className="text-[10px] text-slate-500 block">
                     নাটিয়াপাড়া বাজার, দেলদুয়ার, টাঙ্গাইল
