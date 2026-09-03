@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckCircle2, Truck, Copy, Download, ShoppingBag, PackageSearch, ShieldCheck } from 'lucide-react';
 import { Order } from '../types';
+import { printElementViaAboutBlank } from '../lib/printHelper';
 
 interface OrderSuccessModalProps {
   order: Order | null;
@@ -24,7 +25,10 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
   };
 
   const handlePrint = () => {
-    window.print();
+    printElementViaAboutBlank('printable-receipt', {
+      title: `অর্ডার_রিসিট_${order.orderId}`,
+      pageFormat: 'receipt',
+    });
   };
 
   return (

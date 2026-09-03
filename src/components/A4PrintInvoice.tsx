@@ -3,6 +3,7 @@ import { X, Printer, Check, PhoneCall, MapPin, QrCode, Sparkles, Lock, FileText 
 import { QRCodeSVG } from 'qrcode.react';
 import { Order } from '../types';
 import { generateOfflineReceiptText, getSecureReceiptUrl } from '../lib/receiptHelper';
+import { printElementViaAboutBlank } from '../lib/printHelper';
 
 interface A4PrintInvoiceProps {
   order: Order;
@@ -41,7 +42,10 @@ export const A4PrintInvoice: React.FC<A4PrintInvoiceProps> = ({
   });
 
   const handlePrint = () => {
-    window.print();
+    printElementViaAboutBlank('printable-a4-invoice', {
+      title: `ইনভয়েস_${order.orderId}`,
+      pageFormat: 'A4',
+    });
   };
 
   const secureReceiptUrl = getSecureReceiptUrl(order.orderId);
@@ -124,7 +128,6 @@ export const A4PrintInvoice: React.FC<A4PrintInvoiceProps> = ({
           <div 
             id="printable-a4-invoice"
             className="w-full max-w-[210mm] bg-white p-8 sm:p-10 border border-slate-300 shadow-sm print:border-none print:shadow-none print:p-6 print:w-full space-y-6 text-slate-900 text-xs"
-            style={{ minHeight: '280mm' }}
           >
             
             {/* 1. Header Section */}

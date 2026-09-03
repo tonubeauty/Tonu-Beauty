@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Order } from '../types';
 import { getSingleOrderFromFirestore } from '../lib/firebase';
+import { printElementViaAboutBlank } from '../lib/printHelper';
 import {
   ShieldCheck,
   Printer,
@@ -82,7 +83,10 @@ export const IsolatedReceiptView: React.FC<IsolatedReceiptViewProps> = ({ orderI
   }, [orderId]);
 
   const handlePrint = () => {
-    window.print();
+    printElementViaAboutBlank('isolated-digital-receipt', {
+      title: `ডিজিটাল_রিসিট_${order?.orderId || ''}`,
+      pageFormat: 'receipt',
+    });
   };
 
   const parlourInfo = {
@@ -153,7 +157,7 @@ export const IsolatedReceiptView: React.FC<IsolatedReceiptViewProps> = ({ orderI
       </div>
 
       {/* Standalone Digital Cash Memo Card */}
-      <div className="bg-white max-w-xl w-full rounded-2xl shadow-lg border border-slate-200 overflow-hidden print:shadow-none print:border-none print:rounded-none">
+      <div id="isolated-digital-receipt" className="bg-white max-w-xl w-full rounded-2xl shadow-lg border border-slate-200 overflow-hidden print:shadow-none print:border-none print:rounded-none">
         
         {/* Receipt Header */}
         <div className="p-6 sm:p-7 border-b border-slate-200 bg-linear-to-b from-rose-50/50 to-white text-center space-y-2">
