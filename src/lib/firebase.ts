@@ -38,15 +38,21 @@ export const db = dbInstance;
 const ORDERS_COLLECTION = 'orders';
 const PRODUCTS_COLLECTION = 'products';
 
+// Utility to clean undefined fields before saving to Firestore
+function cleanForFirestore<T>(data: T): any {
+  return JSON.parse(JSON.stringify(data));
+}
+
 // Save or create an order in Firestore
 export async function saveOrderToFirestore(order: Order): Promise<boolean> {
   try {
     if (!db) return false;
     const docRef = doc(db, ORDERS_COLLECTION, order.orderId);
-    await setDoc(docRef, {
+    const sanitized = cleanForFirestore({
       ...order,
       updatedAt: new Date().toISOString(),
     });
+    await setDoc(docRef, sanitized, { merge: true });
     return true;
   } catch (err) {
     console.error('Error saving order to Firestore:', err);
@@ -134,10 +140,11 @@ export async function saveProductToFirestore(product: Product): Promise<boolean>
   try {
     if (!db) return false;
     const docRef = doc(db, PRODUCTS_COLLECTION, product.id);
-    await setDoc(docRef, {
+    const sanitized = cleanForFirestore({
       ...product,
       updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    });
+    await setDoc(docRef, sanitized, { merge: true });
     return true;
   } catch (err) {
     console.error('Error saving product to Firestore:', err);
@@ -164,10 +171,11 @@ export async function saveProductsToFirestore(products: Product[]): Promise<bool
     if (!db) return false;
     for (const prod of products) {
       const docRef = doc(db, PRODUCTS_COLLECTION, prod.id);
-      await setDoc(docRef, {
+      const sanitized = cleanForFirestore({
         ...prod,
         updatedAt: new Date().toISOString(),
-      }, { merge: true });
+      });
+      await setDoc(docRef, sanitized, { merge: true });
     }
     return true;
   } catch (err) {

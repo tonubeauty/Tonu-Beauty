@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { PRODUCTS } from './src/data/products';
+import { PRODUCTS, isProductItem } from './src/data/products';
 import { Order, OrderFormData, CartItem } from './src/types';
 
 // In-memory store for orders (with seed sample for demo tracking)
@@ -194,8 +194,13 @@ async function startServer() {
         });
       }
 
-      // Delivery Fee Calculation
-      const deliveryFee = deliveryZone === 'inside_dhaka' ? 60 : 120;
+      // Delivery Fee Calculation:
+      // Physical products require delivery; parlour service-only reservations do not have delivery fee!
+      const hasPhysicalProducts = verifiedItems.some((it) => {
+        const prod = PRODUCTS.find((p) => p.id === it.productId);
+        return isProductItem(prod);
+      });
+      const deliveryFee = hasPhysicalProducts ? (deliveryZone === 'inside_dhaka' ? 60 : 120) : 0;
       const totalAmount = calculatedSubtotal + deliveryFee;
 
       // Unique Order ID Generation (BD-XXXXX)

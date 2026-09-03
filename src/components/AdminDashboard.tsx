@@ -12,6 +12,7 @@ import {
 } from '../lib/firebase';
 import { A4PrintInvoice } from './A4PrintInvoice';
 import { ServiceManagerModal } from './ServiceManagerModal';
+import { isProductItem } from '../data/products';
 import { resizeScroll, resumeScroll } from '../lib/smoothScroll';
 import {
   LayoutDashboard,
@@ -48,6 +49,9 @@ import {
   Edit2,
   Check,
   Layers,
+  ShoppingBag,
+  Truck,
+  Building2,
   Image as ImageIcon
 } from 'lucide-react';
 
@@ -129,6 +133,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [serviceSearchQuery, setServiceSearchQuery] = useState('');
+  const [adminDivisionFilter, setAdminDivisionFilter] = useState<'all' | 'products' | 'services'>('all');
   const [serviceCategoryFilter, setServiceCategoryFilter] = useState('all');
   const [isSyncingServices, setIsSyncingServices] = useState(false);
 
@@ -565,9 +570,13 @@ function cleanStr(str: string): string {
     };
   }, [orders, statementPhoneQuery]);
 
-  // Filtered Services for Admin Services Management Tab
+  // Filtered Services and Products for Admin Management Tab
   const filteredAdminProducts = useMemo(() => {
     return products.filter((p) => {
+      const isProduct = isProductItem(p);
+      if (adminDivisionFilter === 'products' && !isProduct) return false;
+      if (adminDivisionFilter === 'services' && isProduct) return false;
+
       if (serviceCategoryFilter !== 'all' && p.category !== serviceCategoryFilter) {
         return false;
       }
@@ -581,7 +590,7 @@ function cleanStr(str: string): string {
       }
       return true;
     });
-  }, [products, serviceCategoryFilter, serviceSearchQuery]);
+  }, [products, adminDivisionFilter, serviceCategoryFilter, serviceSearchQuery]);
 
   // Save Parlour Settings
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -1693,14 +1702,14 @@ function cleanStr(str: string): string {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                      পার্লারের সার্ভিস ও প্যাকেজসমূহ
+                      সার্ভিস ও পণ্য ব্যবস্থাপনা (Firebase Firestore)
                     </h2>
                     <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 text-xs font-bold">
                       মোট {products.length} টি
                     </span>
                   </div>
                   <p className="text-xs text-slate-500">
-                    সার্ভিস ও প্যাকেজ সম্পাদনা (Edit), নতুন সার্ভিস যোগ ও ছবি অটো ২০০ KB-তে অপ্টিমাইজ করে ফায়ারবেসে ক্লাউড স্টোরেজ
+                    পণ্য (অনলাইন/অফলাইন ডেলিভারিযোগ্য) ও পার্লার সার্ভিস (প্রতিষ্ঠানে সেবা) যোগ, সম্পাদনা ও স্বয়ংক্রিয় ২০০ KB ইমেজ কম্প্রেশন
                   </p>
                 </div>
 
@@ -1710,7 +1719,7 @@ function cleanStr(str: string): string {
                     onClick={handleSyncAllServices}
                     disabled={isSyncingServices}
                     className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                    title="সকল সার্ভিস ক্লাউড ফায়ারবেসে সিঙ্ক করুন"
+                    title="সকল সার্ভিস ও পণ্য ক্লাউড ফায়ারবেসে সিঙ্ক করুন"
                   >
                     {isSyncingServices ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
@@ -1725,9 +1734,51 @@ function cleanStr(str: string): string {
                     className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                   >
                     <Plus className="w-4 h-4" />
-                    <span>নতুন সার্ভিস বা প্যাকেজ যোগ করুন</span>
+                    <span>নতুন সার্ভিস বা পণ্য যোগ করুন</span>
                   </button>
                 </div>
+              </div>
+
+              {/* Division Segmented Control: All / Products / Services */}
+              <div className="grid grid-cols-3 gap-1 sm:gap-2 p-1 bg-slate-100 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setAdminDivisionFilter('all')}
+                  className={`py-1.5 sm:py-2 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    adminDivisionFilter === 'all'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>সব ({products.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAdminDivisionFilter('products')}
+                  className={`py-1.5 sm:py-2 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    adminDivisionFilter === 'products'
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                  <span>🛍️ পণ্য ({products.filter(p => isProductItem(p)).length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAdminDivisionFilter('services')}
+                  className={`py-1.5 sm:py-2 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    adminDivisionFilter === 'services'
+                      ? 'bg-rose-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>💆 সার্ভিস ({products.filter(p => !isProductItem(p)).length})</span>
+                </button>
               </div>
 
               {/* Quick Category / Search Filter Bar */}
@@ -1737,7 +1788,7 @@ function cleanStr(str: string): string {
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
-                    placeholder="সার্ভিসের নাম বা বিবরণ দিয়ে খুঁজুন..."
+                    placeholder="নাম বা বিবরণ দিয়ে খুঁজুন..."
                     value={serviceSearchQuery}
                     onChange={(e) => setServiceSearchQuery(e.target.value)}
                     className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-rose-500"
@@ -1759,147 +1810,171 @@ function cleanStr(str: string): string {
                     onChange={(e) => setServiceCategoryFilter(e.target.value)}
                     className="w-full py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:bg-white focus:ring-2 focus:ring-rose-500 text-slate-700"
                   >
-                    <option value="all">-- সকল ক্যাটেগরি ({products.length} টি) --</option>
-                    <option value="csa-laser">সিএসএ লেজার ট্রিটমেন্ট</option>
-                    <option value="bridal-makeup">ব্রাইডাল মেকআপ ও সাজ</option>
-                    <option value="facial-skin">ফেসিয়াল ও স্কিন কেয়ার</option>
-                    <option value="hair-care">হেয়ার রিবন্ডিং ও কেয়ার</option>
-                    <option value="pedicure-manicure">পেডিকিউর ও ম্যানিকিউর</option>
-                    <option value="combo-packages">কম্বো প্যাকেজ ও অফার</option>
+                    <option value="all">-- সকল ক্যাটেগরি --</option>
+                    <option value="beauty_products">🛍️ প্রসাধন ও স্কিনকেয়ার পণ্য</option>
+                    <option value="csa_laser">সিএসএ লেজার ট্রিটমেন্ট</option>
+                    <option value="csa-laser">সিএসএ লেজার (Old)</option>
+                    <option value="facial_skin">ফেসিয়াল ও স্কিন কেয়ার</option>
+                    <option value="facial-skin">ফেসিয়াল ও স্কিন কেয়ার (Old)</option>
+                    <option value="bridal_makeup">ব্রাইডাল মেকআপ ও সাজ</option>
+                    <option value="bridal-makeup">ব্রাইডাল মেকআপ (Old)</option>
+                    <option value="hair_spa">হেয়ার রিবন্ডিং ও স্পা</option>
+                    <option value="hair-care">হেয়ার রিবন্ডিং (Old)</option>
                   </select>
                 </div>
               </div>
             </div>
 
-            {/* Services Grid Display */}
+            {/* Services & Products Grid Display */}
             {filteredAdminProducts.length === 0 ? (
               <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
                 <Sparkles className="w-10 h-10 text-slate-300 mx-auto" />
-                <h3 className="font-bold text-sm text-slate-800">কোনো সার্ভিস পাওয়া যায়নি</h3>
+                <h3 className="font-bold text-sm text-slate-800">কোনো আইটেম পাওয়া যায়নি</h3>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  সার্চ ফিল্টারে কোনো ফলাফল মেলেনি অথবা কোনো সার্ভিস যুক্ত করা হয়নি।
+                  সার্চ ফিল্টারে কোনো ফলাফল মেলেনি অথবা কোনো সার্ভিস বা পণ্য যুক্ত করা হয়নি।
                 </p>
                 <button
                   onClick={handleOpenAddService}
                   className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>নতুন সার্ভিস তৈরি করুন</span>
+                  <span>নতুন সার্ভিস বা পণ্য যোগ করুন</span>
                 </button>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredAdminProducts.map((prod) => (
-                  <div
-                    key={prod.id}
-                    className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs hover:shadow-md transition-shadow flex flex-col justify-between group"
-                  >
-                    {/* Top Image & Badges */}
-                    <div className="relative aspect-video bg-slate-100 overflow-hidden">
-                      <img
-                        src={prod.images[0] || 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&q=80&w=800'}
-                        alt={prod.titleBn}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                      />
-                      
-                      {/* Top Badges */}
-                      <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
-                        <span className="bg-slate-900/90 backdrop-blur-xs text-white font-bold text-[10px] px-2 py-0.5 rounded-md shadow-xs">
-                          {prod.categoryBn || 'পার্লার সার্ভিস'}
-                        </span>
-                        {prod.discountPercent > 0 && (
-                          <span className="bg-rose-600 text-white font-bold text-[10px] px-2 py-0.5 rounded-md shadow-xs">
-                            {prod.discountPercent}% ছাড়
+                {filteredAdminProducts.map((prod) => {
+                  const isProd = isProductItem(prod);
+                  return (
+                    <div
+                      key={prod.id}
+                      className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs hover:shadow-md transition-shadow flex flex-col justify-between group"
+                    >
+                      {/* Top Image & Badges */}
+                      <div className="relative aspect-video bg-slate-100 overflow-hidden">
+                        <img
+                          src={prod.images[0] || 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&q=80&w=800'}
+                          alt={prod.titleBn}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                        />
+                        
+                        {/* Top Badges */}
+                        <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
+                          <span className={`backdrop-blur-xs text-white font-bold text-[10px] px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1 ${
+                            isProd ? 'bg-emerald-700/90' : 'bg-rose-700/90'
+                          }`}>
+                            {isProd ? <Truck className="w-2.5 h-2.5" /> : <Building2 className="w-2.5 h-2.5" />}
+                            <span>{isProd ? 'পণ্য (হোম ডেলিভারি)' : 'সার্ভিস (প্রতিষ্ঠানে)'}</span>
                           </span>
-                        )}
-                      </div>
-
-                      {/* Image Size Optimization Tag */}
-                      <div className="absolute bottom-2 right-2 bg-emerald-950/80 backdrop-blur-xs text-emerald-300 text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs flex items-center gap-1">
-                        <Check className="w-2.5 h-2.5" />
-                        <span>≤ 200KB অপ্টিমাইজড</span>
-                      </div>
-                    </div>
-
-                    {/* Content Body */}
-                    <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
-                      <div className="space-y-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="font-extrabold text-sm sm:text-base text-slate-900 leading-snug">
-                            {prod.titleBn}
-                          </h4>
-                        </div>
-                        {prod.title && prod.title !== prod.titleBn && (
-                          <p className="text-[11px] text-slate-500 font-medium truncate">
-                            {prod.title}
-                          </p>
-                        )}
-                        <p className="text-xs text-slate-600 line-clamp-2 pt-1">
-                          {prod.descriptionBn}
-                        </p>
-                      </div>
-
-                      {/* Pricing and Highlights */}
-                      <div className="space-y-2 pt-2 border-t border-slate-100">
-                        <div className="flex items-baseline justify-between">
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-base font-extrabold text-slate-900">
-                              ৳{prod.price.toLocaleString('bn-BD')}
+                          {prod.discountPercent > 0 && (
+                            <span className="bg-rose-600 text-white font-bold text-[10px] px-2 py-0.5 rounded-md shadow-xs">
+                              {prod.discountPercent}% ছাড়
                             </span>
-                            {prod.originalPrice > prod.price && (
-                              <span className="text-xs text-slate-400 line-through">
-                                ৳{prod.originalPrice.toLocaleString('bn-BD')}
+                          )}
+                        </div>
+
+                        {/* Image Size Optimization Tag */}
+                        <div className="absolute bottom-2 right-2 bg-emerald-950/80 backdrop-blur-xs text-emerald-300 text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs flex items-center gap-1">
+                          <Check className="w-2.5 h-2.5" />
+                          <span>≤ 200KB অপ্টিমাইজড</span>
+                        </div>
+                      </div>
+
+                      {/* Content Body */}
+                      <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                        <div className="space-y-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <h4 className="font-extrabold text-sm sm:text-base text-slate-900 leading-snug">
+                              {prod.titleBn}
+                            </h4>
+                          </div>
+                          {prod.title && prod.title !== prod.titleBn && (
+                            <p className="text-[11px] text-slate-500 font-medium truncate">
+                              {prod.title}
+                            </p>
+                          )}
+                          <p className="text-xs text-slate-600 line-clamp-2 pt-1">
+                            {prod.descriptionBn}
+                          </p>
+                        </div>
+
+                        {/* Pricing and Highlights */}
+                        <div className="space-y-2 pt-2 border-t border-slate-100">
+                          <div className="flex items-baseline justify-between">
+                            <div className="flex items-baseline gap-2">
+                              <span className={`text-base font-extrabold ${isProd ? 'text-emerald-800' : 'text-slate-900'}`}>
+                                ৳{prod.price.toLocaleString('bn-BD')}
+                              </span>
+                              {prod.originalPrice > prod.price && (
+                                <span className="text-xs text-slate-400 line-through">
+                                  ৳{prod.originalPrice.toLocaleString('bn-BD')}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-slate-500 font-medium">
+                              স্টক: <b>{prod.stockCount ?? 50}</b>
+                            </span>
+                          </div>
+
+                          {/* Delivery / In-person badge */}
+                          <div className="flex items-center text-[10px] font-semibold">
+                            {isProd ? (
+                              <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <Truck className="w-3 h-3 text-emerald-600" />
+                                <span>অনলাইন/অফলাইনে ডেলিভারিযোগ্য</span>
+                              </span>
+                            ) : (
+                              <span className="text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <Building2 className="w-3 h-3 text-rose-600" />
+                                <span>প্রতিষ্ঠানে এসে সার্ভিস নিতে হবে</span>
                               </span>
                             )}
                           </div>
-                          <span className="text-[11px] text-slate-500 font-medium">
-                            স্টক: <b>{prod.stockCount ?? 50}</b>
-                          </span>
+
+                          {/* Badges Preview */}
+                          <div className="flex flex-wrap gap-1">
+                            {prod.isFeatured && (
+                              <span className="text-[9px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
+                                Featured
+                              </span>
+                            )}
+                            {prod.isBestSeller && (
+                              <span className="text-[9px] bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded font-bold">
+                                Best Seller
+                              </span>
+                            )}
+                            {prod.isNewArrival && (
+                              <span className="text-[9px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded font-bold">
+                                New Offer
+                              </span>
+                            )}
+                          </div>
                         </div>
 
-                        {/* Badges Preview */}
-                        <div className="flex flex-wrap gap-1">
-                          {prod.isFeatured && (
-                            <span className="text-[9px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
-                              Featured
-                            </span>
-                          )}
-                          {prod.isBestSeller && (
-                            <span className="text-[9px] bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded font-bold">
-                              Best Seller
-                            </span>
-                          )}
-                          {prod.isNewArrival && (
-                            <span className="text-[9px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded font-bold">
-                              New Offer
-                            </span>
-                          )}
+                        {/* Action Buttons: Edit and Delete */}
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                          <button
+                            onClick={() => handleOpenEditService(prod)}
+                            className="py-2 px-3 bg-slate-100 hover:bg-rose-50 text-slate-800 hover:text-rose-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-slate-200"
+                          >
+                            <Edit2 className="w-3.5 h-3.5 text-rose-600" />
+                            <span>এডিট করুন</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteProduct(prod.id, prod.titleBn)}
+                            className="py-2 px-3 bg-slate-50 hover:bg-rose-100/70 text-slate-600 hover:text-rose-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-slate-200"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                            <span>ডিলিট</span>
+                          </button>
                         </div>
+
                       </div>
-
-                      {/* Action Buttons: Edit and Delete */}
-                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-                        <button
-                          onClick={() => handleOpenEditService(prod)}
-                          className="py-2 px-3 bg-slate-100 hover:bg-rose-50 text-slate-800 hover:text-rose-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-slate-200"
-                        >
-                          <Edit2 className="w-3.5 h-3.5 text-rose-600" />
-                          <span>এডিট করুন</span>
-                        </button>
-
-                        <button
-                          onClick={() => handleDeleteProduct(prod.id, prod.titleBn)}
-                          className="py-2 px-3 bg-slate-50 hover:bg-rose-100/70 text-slate-600 hover:text-rose-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-slate-200"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                          <span>ডিলিট</span>
-                        </button>
-                      </div>
-
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 

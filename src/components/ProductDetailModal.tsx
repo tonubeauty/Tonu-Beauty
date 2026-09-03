@@ -1,6 +1,23 @@
 import React, { useState } from 'react';
-import { X, Star, ShoppingCart, ShieldCheck, Truck, RotateCcw, Check, Plus, Minus, PhoneCall, Share2 } from 'lucide-react';
+import {
+  X,
+  Star,
+  ShoppingCart,
+  ShieldCheck,
+  Truck,
+  RotateCcw,
+  Check,
+  Plus,
+  Minus,
+  PhoneCall,
+  Share2,
+  Building2,
+  Calendar,
+  AlertTriangle,
+  ShoppingBag
+} from 'lucide-react';
 import { Product } from '../types';
+import { isProductItem } from '../data/products';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -30,6 +47,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   if (!product) return null;
 
+  const isPhysicalProduct = isProductItem(product);
+
   const handleShareModal = async () => {
     if (!product) return;
     const shareUrl = `${window.location.origin}${window.location.pathname}?product=${product.id}`;
@@ -46,7 +65,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       }
       setIsCopied(true);
       if (onToast) {
-        onToast(`'${product.titleBn}' সার্ভিসটির শেয়ার লিংক কপি করা হয়েছে!`);
+        onToast(`'${product.titleBn}' এর শেয়ার লিংক কপি করা হয়েছে!`);
       }
       setTimeout(() => setIsCopied(false), 2000);
     } catch (err) {
@@ -68,9 +87,18 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         
         {/* Top Header & Close Button */}
         <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>১০০% প্রিমিয়াম ও অরিজিনাল পণ্য</span>
+          <div className="flex items-center gap-2 text-xs font-semibold">
+            {isPhysicalProduct ? (
+              <span className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                <Truck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>🛍️ পণ্য • অনলাইন/অফলাইনে ডেলিভারিযোগ্য</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200">
+                <Building2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>🏢 সার্ভিস • প্রতিষ্ঠানে এসে সেবা নিতে হবে</span>
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -80,10 +108,10 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
                 isCopied
                   ? 'bg-emerald-600 text-white border-emerald-600'
-                  : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
               }`}
             >
-              {isCopied ? <Check className="w-3.5 h-3.5" /> : <Share2 className="w-3.5 h-3.5 text-rose-600" />}
+              {isCopied ? <Check className="w-3.5 h-3.5" /> : <Share2 className="w-3.5 h-3.5 text-slate-600" />}
               <span>{isCopied ? 'কপি হয়েছে' : 'শেয়ার লিংক'}</span>
             </button>
 
@@ -111,15 +139,26 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   className="w-full h-full object-cover"
                 />
                 {product.discountPercent > 0 && (
-                  <span className="absolute top-3 left-3 bg-red-500 text-white font-bold text-xs px-2.5 py-1 rounded-lg shadow-sm">
+                  <span className="absolute top-3 left-3 bg-rose-600 text-white font-bold text-xs px-2.5 py-1 rounded-lg shadow-sm">
                     {product.discountPercent}% ছাড়
                   </span>
                 )}
+
+                {/* Bottom Overlay Label */}
+                <div
+                  className={`absolute bottom-2 left-2 right-2 backdrop-blur-xs text-[10px] font-bold px-2 py-1 rounded-lg text-center truncate ${
+                    isPhysicalProduct
+                      ? 'bg-emerald-950/85 text-emerald-200'
+                      : 'bg-rose-950/85 text-rose-200'
+                  }`}
+                >
+                  {isPhysicalProduct ? 'ক্যাশ অন হোম ডেলিভারি প্রযোজ্য' : '🚫 হোম ডেলিভারি নেই • প্রতিষ্ঠানে সেবা গ্রহণ'}
+                </div>
               </div>
 
               {/* Thumbnails */}
               {product.images.length > 1 && (
-                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
                   {product.images.map((img, idx) => (
                     <button
                       key={idx}
@@ -137,11 +176,22 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               {/* Trust Callout */}
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 text-xs space-y-1.5 text-slate-600">
                 <div className="flex items-center gap-2 text-slate-800 font-semibold">
-                  <Truck className="w-4 h-4 text-emerald-600" />
-                  <span>ক্যাশ অন ডেলিভারি সার্ভিস</span>
+                  {isPhysicalProduct ? (
+                    <>
+                      <Truck className="w-4 h-4 text-emerald-600" />
+                      <span>ক্যাশ অন ডেলিভারি সার্ভিস</span>
+                    </>
+                  ) : (
+                    <>
+                      <Building2 className="w-4 h-4 text-rose-600" />
+                      <span>ইন-পার্লার লেজার ও বিউটি সেবা</span>
+                    </>
+                  )}
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  পণ্য হাতে পেয়ে পুরোপুরি চেক করে ডেলিভারি ম্যানকে টাকা দিন। অগ্রিম ১ টাকাও দিতে হবে না।
+                  {isPhysicalProduct
+                    ? 'পণ্য হাতে পেয়ে পুরোপুরি চেক করে ডেলিভারি ম্যানকে টাকা দিন। অগ্রিম পেমেন্ট নেই।'
+                    : 'জার্মান প্রযুক্তির সেবা নিতে সরাসরি প্রতিষ্ঠানে (নাটিয়াপাড়া বাজার, টাঙ্গাইল) আসতে হবে।'}
                 </p>
               </div>
             </div>
@@ -149,7 +199,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             {/* Right Details Column */}
             <div className="md:col-span-7 space-y-4">
               <div>
-                <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                  isPhysicalProduct ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-rose-700 bg-rose-50 border border-rose-200'
+                }`}>
                   {product.categoryBn}
                 </span>
                 <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 leading-snug">
@@ -157,34 +209,26 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 </h2>
 
                 <div className="flex items-center gap-2 mt-2">
-                  <div className="flex items-center text-amber-400 text-xs font-bold bg-amber-50 px-2 py-0.5 rounded">
+                  <div className="flex items-center text-amber-500 text-xs font-bold bg-amber-50 px-2 py-0.5 rounded">
                     <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 mr-1" />
                     <span>{product.rating}</span>
                   </div>
                   <span className="text-xs text-slate-500">({product.reviewCount} কাস্টমার রিভিউ)</span>
                   <span className="text-slate-300">•</span>
-                  {product.stockCount <= 0 ? (
-                    <span className="text-xs text-red-700 font-extrabold bg-red-100 px-2.5 py-0.5 rounded border border-red-200">
-                      স্টক শেষ (Out of Stock)
-                    </span>
-                  ) : product.stockCount <= 10 ? (
-                    <span className="text-xs text-amber-700 font-extrabold bg-amber-100 px-2.5 py-0.5 rounded border border-amber-200">
-                      সীমিত স্টক ({product.stockCount}টি)
-                    </span>
-                  ) : (
-                    <span className="text-xs text-emerald-600 font-semibold bg-emerald-50 px-2.5 py-0.5 rounded">
-                      স্টকে আছে ({product.stockCount}টি)
-                    </span>
-                  )}
+                  <span className="text-xs text-emerald-600 font-semibold bg-emerald-50 px-2.5 py-0.5 rounded">
+                    {isPhysicalProduct ? `স্টক: ${product.stockCount}টি` : 'সিরিয়াল বুকিং সক্রিয়'}
+                  </span>
                 </div>
               </div>
 
               {/* Pricing */}
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
                 <div>
-                  <div className="text-[11px] text-slate-500 font-medium">অফার মূল্য (ক্যাশ অন ডেলিভারি)</div>
+                  <div className="text-[11px] text-slate-500 font-medium">
+                    {isPhysicalProduct ? 'অফার মূল্য (ক্যাশ অন ডেলিভারি)' : 'সার্ভিস ফি (প্রতিষ্ঠানে প্রদেয়)'}
+                  </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-extrabold text-slate-900">
+                    <span className={`text-2xl font-extrabold ${isPhysicalProduct ? 'text-emerald-700' : 'text-slate-900'}`}>
                       ৳{product.price.toLocaleString('bn-BD')}
                     </span>
                     {product.originalPrice > product.price && (
@@ -197,38 +241,40 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
                 {product.discountPercent > 0 && (
                   <div className="text-right">
-                    <span className="text-xs font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg border border-red-100">
-                      আপনার সঞ্চয় ৳{(product.originalPrice - product.price).toLocaleString('bn-BD')}
+                    <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-100">
+                      ৳{(product.originalPrice - product.price).toLocaleString('bn-BD')} ছাড়
                     </span>
                   </div>
                 )}
               </div>
 
-              {/* Color Selector */}
+              {/* Options selection if present */}
               {product.colors && product.colors.length > 0 && (
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-800">কালার সিলেক্ট করুন:</label>
+                  <span className="text-xs font-semibold text-slate-700">অপশন নির্বাচন করুন:</span>
                   <div className="flex flex-wrap gap-2">
-                    {product.colors.map((clr) => (
+                    {product.colors.map((color) => (
                       <button
-                        key={clr}
-                        onClick={() => setSelectedColor(clr)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                          selectedColor === clr
-                            ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        key={color}
+                        onClick={() => setSelectedColor(color)}
+                        className={`px-3 py-1 text-xs rounded-xl border transition-all cursor-pointer ${
+                          selectedColor === color
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
                         }`}
                       >
-                        {clr}
+                        {color}
                       </button>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Quantity Selector */}
-              <div className="flex items-center gap-4 pt-1">
-                <span className="text-xs font-bold text-slate-800">পরিমাণ:</span>
+              {/* Quantity */}
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-slate-700">
+                  {isPhysicalProduct ? 'পরিমাণ:' : 'সংখ্যা:'}
+                </span>
                 <div className="flex items-center border border-slate-300 rounded-xl bg-slate-50 overflow-hidden">
                   <button
                     onClick={handleDecreaseQty}
@@ -260,22 +306,28 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   disabled={product.stockCount <= 0}
                   onClick={() => onDirectOrder(product, quantity, selectedColor, selectedSize)}
                   className={`py-3 px-4 rounded-xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                    product.stockCount <= 0
-                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
-                      : 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white'
+                    isPhysicalProduct
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'bg-rose-600 hover:bg-rose-700 text-white'
                   }`}
                 >
-                  <span>{product.stockCount <= 0 ? 'স্টক শেষ' : 'এখনই বুকিং করুন'}</span>
+                  {isPhysicalProduct ? (
+                    <>
+                      <ShoppingBag className="w-4 h-4" />
+                      <span>এখনই অর্ডার করুন</span>
+                    </>
+                  ) : (
+                    <>
+                      <Calendar className="w-4 h-4" />
+                      <span>সিরিয়াল বুকিং দিন</span>
+                    </>
+                  )}
                 </button>
 
                 <button
                   disabled={product.stockCount <= 0}
                   onClick={() => onAddToCart(product, quantity, selectedColor, selectedSize)}
-                  className={`py-3 px-4 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer ${
-                    product.stockCount <= 0
-                      ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-900'
-                  }`}
+                  className="py-3 px-4 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-900"
                 >
                   <ShoppingCart className="w-4 h-4 text-slate-700" />
                   <span>কার্টে যোগ করুন</span>
@@ -292,15 +344,23 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               <button
                 onClick={() => setActiveTab('desc')}
                 className={`py-2 px-4 border-b-2 transition-colors cursor-pointer ${
-                  activeTab === 'desc' ? 'border-emerald-600 text-emerald-700 font-bold' : 'border-transparent hover:text-slate-900'
+                  activeTab === 'desc'
+                    ? isPhysicalProduct
+                      ? 'border-emerald-600 text-emerald-700 font-bold'
+                      : 'border-rose-600 text-rose-700 font-bold'
+                    : 'border-transparent hover:text-slate-900'
                 }`}
               >
-                পণ্য বৈশিষ্ট্য
+                বিবরণ ও সুবিধা
               </button>
               <button
                 onClick={() => setActiveTab('specs')}
                 className={`py-2 px-4 border-b-2 transition-colors cursor-pointer ${
-                  activeTab === 'specs' ? 'border-emerald-600 text-emerald-700 font-bold' : 'border-transparent hover:text-slate-900'
+                  activeTab === 'specs'
+                    ? isPhysicalProduct
+                      ? 'border-emerald-600 text-emerald-700 font-bold'
+                      : 'border-rose-600 text-rose-700 font-bold'
+                    : 'border-transparent hover:text-slate-900'
                 }`}
               >
                 স্পেসিফিকেশন
@@ -308,23 +368,29 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               <button
                 onClick={() => setActiveTab('delivery')}
                 className={`py-2 px-4 border-b-2 transition-colors cursor-pointer ${
-                  activeTab === 'delivery' ? 'border-emerald-600 text-emerald-700 font-bold' : 'border-transparent hover:text-slate-900'
+                  activeTab === 'delivery'
+                    ? isPhysicalProduct
+                      ? 'border-emerald-600 text-emerald-700 font-bold'
+                      : 'border-rose-600 text-rose-700 font-bold'
+                    : 'border-transparent hover:text-slate-900'
                 }`}
               >
-                ডেলিভারি ও ওয়ারেন্টি
+                {isPhysicalProduct ? 'ডেলিভারি সুবিধা' : 'সার্ভিস স্থান ও নীতি'}
               </button>
             </div>
 
-            {/* Tab 1: Key Features & Description */}
+            {/* Tab 1: Description */}
             {activeTab === 'desc' && (
               <div className="space-y-3 text-xs sm:text-sm text-slate-700 leading-relaxed">
                 <p>{product.descriptionBn}</p>
                 <div className="space-y-1.5 pt-2">
-                  <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">প্রধান সুবিধাসমূহ:</h4>
-                  <ul className="space-y-1.5">
+                  <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">
+                    {isPhysicalProduct ? 'পণ্যের গুণাগুণ:' : 'সার্ভিসের বৈশিষ্ট্য:'}
+                  </h4>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
                     {product.keyFeaturesBn.map((feat, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <li key={i} className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                        <span className="text-emerald-600 font-bold">✓</span>
                         <span>{feat}</span>
                       </li>
                     ))}
@@ -333,17 +399,17 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               </div>
             )}
 
-            {/* Tab 2: Specs Table */}
+            {/* Tab 2: Specs */}
             {activeTab === 'specs' && (
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <table className="w-full text-xs sm:text-sm text-left">
+              <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
+                <table className="w-full text-left">
                   <tbody>
                     {Object.entries(product.specs).map(([key, val], idx) => (
                       <tr key={key} className={idx % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
-                        <td className="py-2.5 px-4 font-bold text-slate-700 w-1/3 border-r border-slate-200">
+                        <td className="py-2.5 px-4 font-semibold text-slate-600 w-1/3 border-r border-slate-200">
                           {key}
                         </td>
-                        <td className="py-2.5 px-4 text-slate-800">{val}</td>
+                        <td className="py-2.5 px-4 text-slate-900">{val}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -351,24 +417,26 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               </div>
             )}
 
-            {/* Tab 3: Delivery Info */}
+            {/* Tab 3: Delivery */}
             {activeTab === 'delivery' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-                  <h5 className="font-bold text-slate-900 flex items-center gap-1.5">
-                    <Truck className="w-4 h-4 text-emerald-600" /> ডেলিভারি সময়সূচি
-                  </h5>
-                  <p className="text-slate-600">{product.deliveryDaysBn}</p>
-                  <p className="text-[11px] text-slate-500">চার্জ: ঢাকা সিটি ৳৬০, ঢাকার বাইরে ৳১২০</p>
-                </div>
-
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-                  <h5 className="font-bold text-slate-900 flex items-center gap-1.5">
-                    <ShieldCheck className="w-4 h-4 text-teal-600" /> ওয়ারেন্টি ও গ্যারান্টি
-                  </h5>
-                  <p className="text-slate-600">{product.warrantyBn || '৭ দিনের হ্যাসল-ফ্রি রিপ্লেসমেন্ট গ্যারান্টি'}</p>
-                  <p className="text-[11px] text-slate-500">ডিফেক্টিভ পণ্য পেলে সাথে সাথে পরিবর্তন সুবিধা</p>
-                </div>
+              <div className="space-y-2.5 text-xs text-slate-700">
+                {isPhysicalProduct ? (
+                  <>
+                    <p><b>অনলাইন/অফলাইন বিক্রয়:</b> সারাদেশে ২-৩ দিনের মধ্যে ক্যাশ অন হোম ডেলিভারি অথবা পার্লারের শপ থেকে সরাসরি সংগ্রহ।</p>
+                    <p><b>কোয়ালিটি:</b> {product.warrantyBn || '১০০% অরিজিনাল অথেনটিক প্রোডাক্ট গ্যারান্টি'}</p>
+                    <p className="text-emerald-800 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100">
+                      {product.deliveryNoticeBn || 'পণ্য হাতে পেয়ে পুরোপুরি যাচাই করে মূল্য পরিশোধ করতে পারবেন।'}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900">
+                      <b>🚫 হোম ডেলিভারি হবে না:</b> প্রোডাক্ট ছাড়া বাকি কোনো সার্ভিস হোম ডেলিভারি হবে না। প্রতিষ্ঠানে এসে সেবা নিতে হবে।
+                    </div>
+                    <p><b>প্রতিষ্ঠানের ঠিকানা:</b> ডুবাইল, সেহড়াতৈল রোড, নাটিয়াপাড়া বাজার, দেলদুয়ার, টাঙ্গাইল</p>
+                    <p><b>সিরিয়াল ও হেল্পলাইন:</b> 01302383795</p>
+                  </>
+                )}
               </div>
             )}
           </div>

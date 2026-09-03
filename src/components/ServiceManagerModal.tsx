@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Product, Category } from '../types';
+import { isProductItem } from '../data/products';
 import { compressImageFile } from '../lib/imageCompressor';
 import {
   X,
@@ -12,9 +13,10 @@ import {
   AlertCircle,
   Loader2,
   Tag,
-  Layers,
+  ShoppingBag,
+  Building2,
   FileText,
-  DollarSign
+  Truck
 } from 'lucide-react';
 
 interface ServiceManagerModalProps {
@@ -44,13 +46,37 @@ const PRESET_BEAUTY_IMAGES = [
     url: 'https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&fit=crop&q=80&w=800',
   },
   {
-    title: 'ম্যানিকিউর ও নেইল আর্ট',
+    title: 'ম্যানিকিউর ও স্পা',
     url: 'https://images.unsplash.com/photo-1632345031435-8727f6897d53?auto=format&fit=crop&q=80&w=800',
   },
   {
     title: 'বডি স্পা ও ম্যাসাজ',
     url: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&q=80&w=800',
-  }
+  },
+];
+
+// Preset cosmetic products images as quick choices
+const PRESET_PRODUCT_IMAGES = [
+  {
+    title: 'ভিটামিন সি সিরাম',
+    url: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=800&q=80',
+  },
+  {
+    title: 'গ্লো ক্রিম ও ময়েশ্চারাইজার',
+    url: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=800&q=80',
+  },
+  {
+    title: 'ফেসওয়াশ ও ক্লিনজার',
+    url: 'https://images.unsplash.com/photo-1556228722-d0b5d0f3bb2c?auto=format&fit=crop&w=800&q=80',
+  },
+  {
+    title: 'সানস্ক্রিন এসপিএফ ৫০+',
+    url: 'https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?auto=format&fit=crop&w=800&q=80',
+  },
+  {
+    title: 'স্কিন টোনার ও এসেন্স',
+    url: 'https://images.unsplash.com/photo-1608248597359-216524177d70?auto=format&fit=crop&w=800&q=80',
+  },
 ];
 
 export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
@@ -62,9 +88,12 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
 }) => {
   const isEditing = !!productToEdit;
 
+  // Item Type: 'product' (পণ্য - অনলাইন/অফলাইন ডেলিভারিযোগ্য) | 'service' (সার্ভিস - প্রতিষ্ঠানে সেবা)
+  const [itemType, setItemType] = useState<'product' | 'service'>('service');
+
   const [titleBn, setTitleBn] = useState('');
   const [titleEn, setTitleEn] = useState('');
-  const [category, setCategory] = useState('csa-laser');
+  const [category, setCategory] = useState('csa_laser');
   const [price, setPrice] = useState<number | ''>('');
   const [originalPrice, setOriginalPrice] = useState<number | ''>('');
   const [stockCount, setStockCount] = useState<number>(50);
@@ -86,9 +115,11 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
   // Populate when editing or reset when adding
   useEffect(() => {
     if (productToEdit) {
+      const isProduct = isProductItem(productToEdit);
+      setItemType(isProduct ? 'product' : 'service');
       setTitleBn(productToEdit.titleBn || '');
       setTitleEn(productToEdit.title || '');
-      setCategory(productToEdit.category || 'csa-laser');
+      setCategory(productToEdit.category || (isProduct ? 'beauty_products' : 'csa_laser'));
       setPrice(productToEdit.price || 0);
       setOriginalPrice(productToEdit.originalPrice || productToEdit.price || 0);
       setStockCount(productToEdit.stockCount ?? 50);
@@ -99,9 +130,10 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
       setIsBestSeller(!!productToEdit.isBestSeller);
       setIsNewArrival(!!productToEdit.isNewArrival);
     } else {
+      setItemType('service');
       setTitleBn('');
       setTitleEn('');
-      setCategory('csa-laser');
+      setCategory('csa_laser');
       setPrice('');
       setOriginalPrice('');
       setStockCount(50);
@@ -120,6 +152,30 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
     setFormError('');
   }, [productToEdit, isOpen]);
 
+  // When switching itemType in "Add" mode, adapt default category and features
+  const handleItemTypeChange = (newType: 'product' | 'service') => {
+    setItemType(newType);
+    if (!isEditing) {
+      if (newType === 'product') {
+        setCategory('beauty_products');
+        setFeaturesList([
+          'শতভাগ অরিজিনাল ও অথেনটিক বিউটি প্রোডাক্ট',
+          'অনলাইন ও অফলাইনে সরাসরি ক্রয় সুবিধা',
+          'সারাদেশে দ্রুত ক্যাশ অন হোম ডেলিভারি ব্যবস্থা'
+        ]);
+        setImages([PRESET_PRODUCT_IMAGES[0].url]);
+      } else {
+        setCategory('csa_laser');
+        setFeaturesList([
+          'অভিজ্ঞ নারী বিউটিশিয়ান ও স্পেশালিস্ট দ্বারা পরিচালিত',
+          'উন্নত জার্মান সিএসএ টেকনোলজি লেজার ইকুইপমেন্ট',
+          '১০০% নিরাপদ ও দীর্ঘস্থায়ী ফলাফল'
+        ]);
+        setImages([PRESET_BEAUTY_IMAGES[0].url]);
+      }
+    }
+  };
+
   if (!isOpen) return null;
 
   // Handle Image File Upload with Auto-compression to <= 200KB
@@ -137,12 +193,8 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        // Validate image type
-        if (!file.type.startsWith('image/')) {
-          continue;
-        }
+        if (!file.type.startsWith('image/')) continue;
 
-        // Compress strictly to <= 200 KB
         const result = await compressImageFile(file, 200 * 1024);
         newCompressedImages.push(result.dataUrl);
         totalOriginalKb += result.originalSizeKb;
@@ -158,58 +210,63 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
       }
     } catch (err: any) {
       console.error('Image compression failed:', err);
-      setFormError('ইমেজ কমপ্রেস করতে সমস্যা হয়েছে: ' + (err.message || 'অনুগ্রহ করে পুনরায় চেষ্টা করুন'));
+      setFormError('ছবি কমপ্রেস করতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
     } finally {
       setIsCompressing(false);
-      // Reset input value so same file can be re-uploaded if desired
       e.target.value = '';
     }
   };
 
+  // Add Image via Direct URL
   const handleAddImageUrl = () => {
     if (!imageUrlInput.trim()) return;
     setImages((prev) => [...prev, imageUrlInput.trim()]);
     setImageUrlInput('');
   };
 
-  const handleRemoveImage = (index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleAddFeature = () => {
-    if (!newFeatureInput.trim()) return;
-    setFeaturesList((prev) => [...prev, newFeatureInput.trim()]);
-    setNewFeatureInput('');
-  };
-
-  const handleRemoveFeature = (index: number) => {
-    setFeaturesList((prev) => prev.filter((_, i) => i !== index));
-  };
-
+  // Quick preset image selector
   const handleSelectPresetImage = (url: string) => {
     if (!images.includes(url)) {
       setImages((prev) => [...prev, url]);
     }
   };
 
-  // Form Submit
+  // Remove image from list
+  const handleRemoveImage = (indexToRemove: number) => {
+    setImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+  };
+
+  // Add Key Feature bullet
+  const handleAddFeature = () => {
+    if (!newFeatureInput.trim()) return;
+    setFeaturesList((prev) => [...prev, newFeatureInput.trim()]);
+    setNewFeatureInput('');
+  };
+
+  // Remove Key Feature bullet
+  const handleRemoveFeature = (idx: number) => {
+    setFeaturesList((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // Submit Handler: Saves directly to Firestore via onSave prop
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
+
     if (!titleBn.trim()) {
-      setFormError('অনুগ্রহ করে সার্ভিসের বাংলা নাম লিখুন');
+      setFormError('দয়া করে বাংলা নাম লিখুন।');
       return;
     }
     if (price === '' || Number(price) <= 0) {
-      setFormError('অনুগ্রহ করে সঠিক মূল্য লিখুন');
+      setFormError('দয়া করে সঠিক মূল্য লিখুন।');
       return;
     }
     if (images.length === 0) {
-      setFormError('অনুগ্রহ করে অন্তত ১টি ছবি আপলোড বা যুক্ত করুন');
+      setFormError('কমপক্ষে একটি ছবি যুক্ত করুন।');
       return;
     }
 
     setIsSaving(true);
-    setFormError('');
 
     try {
       const numPrice = Number(price);
@@ -217,76 +274,101 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
       const discountPercent = numOrig > numPrice ? Math.round(((numOrig - numPrice) / numOrig) * 100) : 0;
 
       // Find Category Name in Bengali
-      const matchedCat = categories.find((c) => c.id === category);
-      const categoryBn = matchedCat ? matchedCat.nameBn : 'পার্লার সার্ভিস';
+      let categoryBn = 'পার্লার সার্ভিস';
+      if (itemType === 'product') {
+        categoryBn = 'প্রসাধন ও স্কিনকেয়ার পণ্য';
+      } else {
+        const matchedCat = categories.find((c) => c.id === category);
+        if (matchedCat) categoryBn = matchedCat.nameBn;
+        else if (category === 'csa_laser') categoryBn = 'সিএসএ লেজার ট্রিটমেন্ট';
+        else if (category === 'facial_skin') categoryBn = 'ফেসিয়াল ও স্কিন কেয়ার';
+        else if (category === 'bridal_makeup') categoryBn = 'ব্রাইডাল মেকআপ ও সাজ';
+        else if (category === 'hair_spa') categoryBn = 'হেয়ার রিবন্ডিং ও স্পা';
+      }
 
-      const serviceId = productToEdit?.id || `srv-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const itemId = productToEdit?.id || (itemType === 'product' ? `prod-${Date.now()}` : `srv-${Date.now()}`);
 
       const finalProduct: Product = {
-        id: serviceId,
+        id: itemId,
         title: titleEn.trim() || titleBn.trim(),
         titleBn: titleBn.trim(),
-        category,
+        category: itemType === 'product' ? 'beauty_products' : category,
         categoryBn,
+        itemType,
         price: numPrice,
         originalPrice: numOrig,
         discountPercent,
-        rating: productToEdit?.rating || 5,
-        reviewCount: productToEdit?.reviewCount || 12,
-        stockCount: Number(stockCount) || 50,
+        rating: productToEdit?.rating || 4.9,
+        reviewCount: productToEdit?.reviewCount || 20,
+        stockCount: Number(stockCount) || (itemType === 'product' ? 50 : 30),
         isFeatured,
         isBestSeller,
         isNewArrival,
         images,
         description: descriptionBn.trim() || titleBn.trim(),
-        descriptionBn: descriptionBn.trim() || `${titleBn} তনু বিউটি পার্লার ও লেজার সেন্টারের অন্যতম জনপ্রিয় প্রিমিয়াম সার্ভিস।`,
-        keyFeaturesBn: featuresList.length > 0 ? featuresList : ['উন্নত সেবা', 'অভিজ্ঞ স্পেশালিস্ট'],
-        specs: productToEdit?.specs || {
-          'সার্ভিস সময়কাল': '৪৫-৬০ মিনিট',
-          'শাখা': 'নাটিয়াপাড়া, দেলদুয়ার, টাঙ্গাইল',
-        },
+        descriptionBn: descriptionBn.trim() || (itemType === 'product'
+          ? `${titleBn} তনু বিউটি পার্লারের শতভাগ অথেনটিক স্কিনকেয়ার পণ্য।`
+          : `${titleBn} তনু বিউটি পার্লার ও লেজার সেন্টারের জনপ্রিয় প্রিমিয়াম সার্ভিস।`),
+        keyFeaturesBn: featuresList.length > 0 ? featuresList : ['উন্নত সেবা', 'শতভাগ সন্তুষ্টি'],
+        warrantyBn: itemType === 'product' ? '১০০% অরিজিনাল প্রোডাক্ট গ্যারান্টি' : 'প্রফেশনাল স্পেশালিস্ট কেয়ার',
+        deliveryDaysBn: itemType === 'product' ? '২-৩ দিনের মধ্যে হোম ডেলিভারি' : 'ডেলিভারি হবে না - প্রতিষ্ঠানে এসে সেবা নিতে হবে',
+        deliveryNoticeBn: itemType === 'product'
+          ? 'অনলাইন ও অফলাইনে বিক্রয়যোগ্য। সারাদেশে হোম ডেলিভারি ও ক্যাশ অন ডেলিভারি প্রযোজ্য।'
+          : 'প্রোডাক্ট ছাড়া বাকি সার্ভিসগুলো ডেলিভারি হবে না। প্রতিষ্ঠানে এসে সার্ভিস নিতে হবে।',
+        specs: productToEdit?.specs || (itemType === 'product' ? {
+          'প্রকার': 'বিউটি ও স্কিনকেয়ার প্রোডাক্ট',
+          'বিক্রয়': 'অনলাইন ও অফলাইন উভয় মাধ্যমে',
+          'হোম ডেলিভারি': 'সারাদেশে ক্যাশ অন ডেলিভারি',
+          'শপ লোকেশন': 'নাটিয়াপাড়া বাজার, দেলদুয়ার, টাঙ্গাইল'
+        } : {
+          'সার্ভিস স্থান': 'তনু বিউটি পার্লার, নাটিয়াপাড়া বাজার, দেলদুয়ার, টাঙ্গাইল',
+          'সার্ভিস সময়কাল': '৪০-৬০ মিনিট প্রফেশনাল সেশন',
+          'যোগাযোগ': '01302383795'
+        }),
       };
 
       await onSave(finalProduct);
       onClose();
     } catch (err: any) {
-      console.error('Failed to save service:', err);
-      setFormError('সার্ভিস সেভ করতে সমস্যা হয়েছে: ' + (err.message || 'ফায়ারবেস চেক করুন'));
+      console.error('Failed to save item to Firestore:', err);
+      setFormError('ফায়ারবেসে সেভ করতে সমস্যা হয়েছে: ' + (err.message || 'ইন্টারনেট চেক করুন'));
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className="bg-white rounded-3xl w-full max-w-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+      <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
         
         {/* Modal Header */}
-        <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/80 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-rose-600 flex items-center justify-center text-white">
-              <Sparkles className="w-5 h-5" />
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+              itemType === 'product' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+            }`}>
+              {itemType === 'product' ? <ShoppingBag className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
             </div>
             <div>
-              <h3 className="font-bold text-sm sm:text-base text-white">
-                {isEditing ? 'সার্ভিস / প্যাকেজ সম্পাদনা (Edit)' : 'নতুন পার্লার সার্ভিস বা প্যাকেজ যোগ করুন'}
+              <h3 className="font-extrabold text-slate-900 text-sm sm:text-base">
+                {isEditing ? 'সার্ভিস বা পণ্য সম্পাদনা' : 'নতুন সার্ভিস বা পণ্য যোগ করুন'}
               </h3>
-              <p className="text-[11px] text-slate-300">
-                ফায়ারবেস ক্লাউড স্টোরেজ ও অটোমেটিক ২০০ KB ইমেজ অপ্টিমাইজার
+              <p className="text-[11px] text-slate-500">
+                ফায়ারবেস ক্লাউড ডাটাবেস (Firestore) এ স্বয়ংক্রিয়ভাবে রিয়েল-টাইমে সংরক্ষিত হবে
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-full bg-slate-200/80 hover:bg-slate-300 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Modal Body / Form */}
-        <form onSubmit={handleSubmit} data-lenis-prevent className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1 text-xs sm:text-sm">
+        {/* Form Body */}
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1 text-slate-800">
           
           {formError && (
             <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
@@ -295,22 +377,84 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
             </div>
           )}
 
+          {/* ========================================================================= */}
+          {/* SECTION 0: PRIMARY ITEM TYPE SELECTOR (পণ্য বনাম সার্ভিস) */}
+          {/* ========================================================================= */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-900 block">
+              আইটেমের ধরন নির্বাচন করুন <span className="text-rose-600">*</span>:
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Option 1: Product */}
+              <button
+                type="button"
+                onClick={() => handleItemTypeChange('product')}
+                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
+                  itemType === 'product'
+                    ? 'bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-500/20 shadow-xs'
+                    : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-600'
+                }`}
+              >
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                  itemType === 'product' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  <ShoppingBag className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-xs sm:text-sm text-slate-900 flex items-center justify-between">
+                    <span>🛍️ বিউটি ও স্কিনকেয়ার পণ্য</span>
+                    {itemType === 'product' && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                    অনলাইন ও অফলাইনে বিক্রয়যোগ্য • সারাদেশে হোম ডেলিভারি প্রযোজ্য
+                  </p>
+                </div>
+              </button>
+
+              {/* Option 2: Service */}
+              <button
+                type="button"
+                onClick={() => handleItemTypeChange('service')}
+                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
+                  itemType === 'service'
+                    ? 'bg-rose-50/90 border-rose-400 ring-2 ring-rose-500/20 shadow-xs'
+                    : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-600'
+                }`}
+              >
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                  itemType === 'service' ? 'bg-rose-600 text-white' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  <Building2 className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-xs sm:text-sm text-slate-900 flex items-center justify-between">
+                    <span>💆 পার্লার ও লেজার সার্ভিস</span>
+                    {itemType === 'service' && <CheckCircle2 className="w-4 h-4 text-rose-600 shrink-0" />}
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                    ডেলিভারি হবে না • প্রতিষ্ঠানে এসে সেবা নিতে হবে
+                  </p>
+                </div>
+              </button>
+            </div>
+          </div>
+
           {/* Section 1: Basic Info */}
           <div className="space-y-4">
             <h4 className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5 pb-1 border-b border-slate-100">
               <Tag className="w-4 h-4 text-rose-600" />
-              <span>সার্ভিসের মূল তথ্য</span>
+              <span>{itemType === 'product' ? 'পণ্যের মূল বিবরণ' : 'সার্ভিসের মূল বিবরণ'}</span>
             </h4>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-800">
-                  সার্ভিসের নাম (বাংলায়) <span className="text-rose-600">*</span>
+                  {itemType === 'product' ? 'পণ্যের নাম (বাংলায়)' : 'সার্ভিসের নাম (বাংলায়)'} <span className="text-rose-600">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="যেমন: ফুল বডি সিএসএ লেজার ট্রিটমেন্ট"
+                  placeholder={itemType === 'product' ? 'যেমন: ভিটামিন সি গ্লো সিরাম' : 'যেমন: ফুল বডি সিএসএ লেজার ট্রিটমেন্ট'}
                   value={titleBn}
                   onChange={(e) => setTitleBn(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm outline-none focus:bg-white focus:ring-2 focus:ring-rose-500"
@@ -319,11 +463,11 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-800">
-                  সার্ভিসের নাম (ইংরেজিতে / Title)
+                  নাম (ইংরেজিতে / Title)
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Full Body CSA Laser Treatment"
+                  placeholder={itemType === 'product' ? 'e.g. Vitamin C Face Serum' : 'e.g. Full Body CSA Laser Treatment'}
                   value={titleEn}
                   onChange={(e) => setTitleEn(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm outline-none focus:bg-white focus:ring-2 focus:ring-rose-500"
@@ -331,32 +475,40 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-800">ক্যাটেগরি নির্বাচন করুন:</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm outline-none focus:bg-white focus:ring-2 focus:ring-rose-500"
-                >
-                  <option value="csa-laser">সিএসএ লেজার ট্রিটমেন্ট</option>
-                  <option value="bridal-makeup">ব্রাইডাল মেকআপ ও সাজ</option>
-                  <option value="facial-skin">ফেসিয়াল ও স্কিন কেয়ার</option>
-                  <option value="hair-care">হেয়ার রিবন্ডিং ও কেয়ার</option>
-                  <option value="pedicure-manicure">পেডিকিউর ও ম্যানিকিউর</option>
-                  <option value="combo-packages">কম্বো প্যাকেজ ও অফার</option>
-                </select>
+                <label className="text-xs font-bold text-slate-800">ক্যাটেগরি:</label>
+                {itemType === 'product' ? (
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="beauty_products">🛍️ প্রসাধন ও স্কিনকেয়ার পণ্য</option>
+                  </select>
+                ) : (
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm outline-none focus:bg-white focus:ring-2 focus:ring-rose-500"
+                  >
+                    <option value="csa_laser">⚡ সিএসএ লেজার ট্রিটমেন্ট</option>
+                    <option value="facial_skin">💆 ফেসিয়াল ও স্কিন কেয়ার</option>
+                    <option value="bridal_makeup">💄 ব্রাইডাল মেকআপ ও সাজ</option>
+                    <option value="hair_spa">✂️ হেয়ার রিবন্ডিং ও স্পা</option>
+                  </select>
+                )}
               </div>
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-800">
-                  রেগুলার মূল্য (৳) <span className="text-rose-600">*</span>
+                  বিক্রয় মূল্য (৳) <span className="text-rose-600">*</span>
                 </label>
                 <input
                   type="number"
                   required
                   min={1}
-                  placeholder="যেমন: 2500"
+                  placeholder="যেমন: 850"
                   value={price}
                   onChange={(e) => setPrice(e.target.value ? Number(e.target.value) : '')}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-bold text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-rose-500"
@@ -365,16 +517,52 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-800">
-                  আগের মূল্য / ডিসকাউন্ট (৳):
+                  পূর্বের মূল্য / ডিসকাউন্ট (৳):
                 </label>
                 <input
                   type="number"
                   min={0}
-                  placeholder="যেমন: 3000 (ঐচ্ছিক)"
+                  placeholder="যেমন: 1200 (ঐচ্ছিক)"
                   value={originalPrice}
                   onChange={(e) => setOriginalPrice(e.target.value ? Number(e.target.value) : '')}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm outline-none focus:bg-white focus:ring-2 focus:ring-rose-500"
                 />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-1">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-800">
+                  {itemType === 'product' ? 'স্টকে বিদ্যমান পণ্যের সংখ্যা' : 'দৈনিক অ্যাপয়েন্টমেন্ট ক্যাপাসিটি'}:
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={stockCount}
+                  onChange={(e) => setStockCount(Number(e.target.value))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm outline-none focus:bg-white focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-800">
+                  ডেলিভারি / সার্ভিস নীতি:
+                </label>
+                <div className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 ${
+                  itemType === 'product' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
+                }`}>
+                  {itemType === 'product' ? (
+                    <>
+                      <Truck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>অনলাইন ও অফলাইনে বিক্রয় ও হোম ডেলিভারি</span>
+                    </>
+                  ) : (
+                    <>
+                      <Building2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      <span>ডেলিভারি হবে না • প্রতিষ্ঠানে এসে সেবা নিতে হবে</span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -385,17 +573,17 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
               <div>
                 <h4 className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4 text-rose-600" />
-                  <span>সার্ভিস / প্যাকেজের ছবি ও অটো ২০০ KB কম্প্রেশন</span>
+                  <span>ছবি আপলোড ও স্বয়ংক্রিয় ২০০ KB কম্প্রেশন</span>
                 </h4>
                 <p className="text-[11px] text-slate-500">
-                  যেকোনো সাইজের ছবি আপলোড করলে সিস্টেম স্বয়ংক্রিয়ভাবে ২০০ কেবির মধ্যে অপ্টিমাইজ করে ফায়ারবেসে জমা রাখবে।
+                  যেকোনো সাইজের ছবি আপলোড করলে সিস্টেম স্বয়ংক্রিয়ভাবে ২০০ কেবির মধ্যে কমপ্রেস করে ফায়ারবেসে জমা রাখবে।
                 </p>
               </div>
 
               {compressionLog && (
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-[11px] font-bold shrink-0">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>{compressionLog.original} KB ➔ {compressionLog.compressed} KB (২০০ KB এর নিচে কনভার্ট)</span>
+                  <span>{compressionLog.original} KB ➔ {compressionLog.compressed} KB (২০০ KB এর নিচে অপ্টিমাইজড)</span>
                 </div>
               )}
             </div>
@@ -416,7 +604,7 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
                 {isCompressing ? (
                   <div className="flex flex-col items-center gap-1 text-rose-600">
                     <Loader2 className="w-6 h-6 animate-spin" />
-                    <span className="text-xs font-bold">ইমেজ ২০০ কেবিতে কমপ্রেস হচ্ছে...</span>
+                    <span className="text-xs font-bold">ইমেজ ২০০ কেবিতে অপ্টিমাইজ হচ্ছে...</span>
                   </div>
                 ) : (
                   <>
@@ -455,10 +643,10 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
             {/* Quick preset selector */}
             <div className="pt-2">
               <span className="text-[11px] font-bold text-slate-500 block mb-1.5">
-                দ্রুত ব্যবহারের জন্য পার্লার ডেমো ফটো সিলেক্ট করুন:
+                {itemType === 'product' ? 'দ্রুত ব্যবহারের জন্য কসমেটিক ডেমো ফটো সিলেক্ট করুন:' : 'দ্রুত ব্যবহারের জন্য পার্লার ডেমো ফটো সিলেক্ট করুন:'}
               </span>
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                {PRESET_BEAUTY_IMAGES.map((preset, idx) => (
+                {(itemType === 'product' ? PRESET_PRODUCT_IMAGES : PRESET_BEAUTY_IMAGES).map((preset, idx) => (
                   <button
                     key={idx}
                     type="button"
@@ -484,7 +672,7 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                   {images.map((imgUrl, idx) => (
                     <div key={idx} className="relative rounded-xl overflow-hidden border border-slate-200 aspect-video group bg-white shadow-2xs">
-                      <img src={imgUrl} alt={`Service ${idx}`} className="w-full h-full object-cover" />
+                      <img src={imgUrl} alt={`Item ${idx}`} className="w-full h-full object-cover" />
                       <div className="absolute top-1 right-1">
                         <button
                           type="button"
@@ -511,16 +699,16 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
           <div className="space-y-4">
             <h4 className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5 pb-1 border-b border-slate-100">
               <FileText className="w-4 h-4 text-rose-600" />
-              <span>সার্ভিসের বিস্তারিত বিবরণ ও সুবিধাসমূহ</span>
+              <span>বিস্তারিত বিবরণ ও সুবিধাসমূহ</span>
             </h4>
 
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-800">
-                সার্ভিস বা প্যাকেজের বিস্তারিত বিবরণ:
+                বিস্তারিত বিবরণ:
               </label>
               <textarea
                 rows={3}
-                placeholder="সার্ভিসের উপকারিতা, পদ্ধতি ও যত্ন সম্পর্কে লিখুন..."
+                placeholder={itemType === 'product' ? 'পণ্যের গুণাগুণ, ব্যবহারের নিয়ম ও উপকরণ সম্পর্কে লিখুন...' : 'সার্ভিসের উপকারিতা, পদ্ধতি ও স্পেশালিস্ট কেয়ার সম্পর্কে লিখুন...'}
                 value={descriptionBn}
                 onChange={(e) => setDescriptionBn(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm outline-none focus:bg-white focus:ring-2 focus:ring-rose-500 resize-none"
@@ -536,7 +724,7 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="যেমন: ১ সেশনেই পরিবর্তন দৃশ্যমান"
+                  placeholder="যেমন: ১০০% অর্গানিক ও ত্বকের জন্য নিরাপদ"
                   value={newFeatureInput}
                   onChange={(e) => setNewFeatureInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -577,7 +765,7 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
             </div>
 
             {/* Badges / Highlights */}
-            <div className="pt-2 grid grid-cols-3 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200 text-xs">
+            <div className="pt-2 grid grid-cols-3 gap-2 sm:gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200 text-[11px] sm:text-xs">
               <label className="flex items-center gap-2 font-bold text-slate-700 cursor-pointer">
                 <input
                   type="checkbox"
@@ -585,7 +773,7 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
                   onChange={(e) => setIsFeatured(e.target.checked)}
                   className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
                 />
-                <span>স্পেশাল প্যাকেজ (Featured)</span>
+                <span>স্পেশাল (Featured)</span>
               </label>
 
               <label className="flex items-center gap-2 font-bold text-slate-700 cursor-pointer">
@@ -605,7 +793,7 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
                   onChange={(e) => setIsNewArrival(e.target.checked)}
                   className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
                 />
-                <span>নতুন অফার (New Offer)</span>
+                <span>নতুন (New Arrival)</span>
               </label>
             </div>
           </div>
@@ -623,7 +811,9 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
             <button
               type="submit"
               disabled={isSaving || isCompressing}
-              className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs sm:text-sm rounded-xl flex items-center gap-2 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+              className={`px-6 py-2.5 text-white font-bold text-xs sm:text-sm rounded-xl flex items-center gap-2 transition-colors cursor-pointer shadow-xs disabled:opacity-50 ${
+                itemType === 'product' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'
+              }`}
             >
               {isSaving ? (
                 <>
@@ -633,7 +823,7 @@ export const ServiceManagerModal: React.FC<ServiceManagerModalProps> = ({
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>{isEditing ? 'সার্ভিস আপডেট ও ফায়ারবেসে সেভ' : 'নতুন সার্ভিস ফায়ারবেসে সেভ করুন'}</span>
+                  <span>{isEditing ? 'আপডেট ও ফায়ারবেসে সেভ করুন' : 'ফায়ারবেস ডাটাবেসে সেভ করুন'}</span>
                 </>
               )}
             </button>

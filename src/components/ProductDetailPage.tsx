@@ -12,9 +12,17 @@ import {
   Share2, 
   Home, 
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Building2,
+  AlertTriangle,
+  Calendar,
+  CheckCircle2,
+  Package,
+  MapPin,
+  ShoppingBag
 } from 'lucide-react';
 import { Product } from '../types';
+import { isProductItem } from '../data/products';
 import { scrollToTarget, resizeScroll, resumeScroll } from '../lib/smoothScroll';
 
 interface ProductDetailPageProps {
@@ -44,6 +52,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState<'desc' | 'specs' | 'delivery'>('desc');
   const [isCopied, setIsCopied] = useState(false);
+
+  const isPhysicalProduct = isProductItem(product);
 
   useEffect(() => {
     resumeScroll();
@@ -80,6 +90,14 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
   const handleIncreaseQty = () => {
     if (quantity < product.stockCount) setQuantity(quantity + 1);
+  };
+
+  const handlePrimaryAction = () => {
+    if (!isPhysicalProduct && onOpenAppointment) {
+      onOpenAppointment(product.titleBn);
+    } else {
+      onDirectOrder(product, quantity, selectedColor, selectedSize);
+    }
   };
 
   return (
@@ -119,11 +137,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           </button>
         </div>
 
-        {/* Main Product Card */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8">
+        {/* Main Product / Service Detail Card */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
             
-            {/* Left: Product Images */}
+            {/* Left: Product / Service Images & Badges */}
             <div className="lg:col-span-6 space-y-4">
               <div className="aspect-square rounded-2xl bg-slate-100 border border-slate-200 overflow-hidden relative">
                 <img
@@ -133,10 +151,31 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   className="w-full h-full object-cover"
                 />
                 {product.discountPercent > 0 && (
-                  <span className="absolute top-3 left-3 bg-rose-600 text-white font-bold text-xs px-2.5 py-1 rounded-md">
+                  <span className="absolute top-3 left-3 bg-rose-600 text-white font-bold text-xs px-2.5 py-1 rounded-md shadow-xs">
                     {product.discountPercent}% ছাড়
                   </span>
                 )}
+
+                {/* Bottom Overlay Label */}
+                <div
+                  className={`absolute bottom-3 left-3 right-3 backdrop-blur-xs text-xs font-bold px-3 py-1.5 rounded-xl text-center truncate shadow-xs ${
+                    isPhysicalProduct
+                      ? 'bg-emerald-950/85 text-emerald-200'
+                      : 'bg-rose-950/85 text-rose-200'
+                  }`}
+                >
+                  {isPhysicalProduct ? (
+                    <span className="flex items-center justify-center gap-1.5">
+                      <Truck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>🛍️ পণ্য • ক্যাশ অন হোম ডেলিভারি প্রযোজ্য</span>
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-rose-400" />
+                      <span>🏢 পার্লার সার্ভিস • প্রতিষ্ঠানে এসে সেবা নিতে হবে</span>
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Gallery Thumbnails */}
@@ -160,24 +199,58 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
               {/* Trust Indicators */}
               <div className="grid grid-cols-2 gap-3 pt-2">
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-2.5 text-xs text-slate-700">
-                  <Truck className="w-4 h-4 text-slate-500 shrink-0" />
-                  <span>ক্যাশ অন ডেলিভারি</span>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-2.5 text-xs text-slate-700">
-                  <ShieldCheck className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>১০০% অরিজিনাল সেবা</span>
-                </div>
+                {isPhysicalProduct ? (
+                  <>
+                    <div className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-100 flex items-center gap-2.5 text-xs text-emerald-900">
+                      <Truck className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div>
+                        <div className="font-bold">হোম ডেলিভারি</div>
+                        <div className="text-[11px] text-emerald-700">সারাদেশে ক্যাশ অন ডেলিভারি</div>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-2.5 text-xs text-slate-700">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div>
+                        <div className="font-bold">১০০% অরিজিনাল</div>
+                        <div className="text-[11px] text-slate-500">অথেনটিক বিউটি প্রোডাক্ট</div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="p-3 rounded-xl bg-rose-50/70 border border-rose-100 flex items-center gap-2.5 text-xs text-rose-900">
+                      <Building2 className="w-4 h-4 text-rose-600 shrink-0" />
+                      <div>
+                        <div className="font-bold">ইন-পার্লার সেবা</div>
+                        <div className="text-[11px] text-rose-700">প্রতিষ্ঠানে এসে সেবা নিতে হবে</div>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-2.5 text-xs text-slate-700">
+                      <Sparkles className="w-4 h-4 text-rose-600 shrink-0" />
+                      <div>
+                        <div className="font-bold">জার্মান সিএসএ টেকনোলজি</div>
+                        <div className="text-[11px] text-slate-500">১০০% নিরাপদ ও ব্যথাহীন</div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Right: Product Details & Actions */}
+            {/* Right: Details & Order / Booking Controls */}
             <div className="lg:col-span-6 space-y-5">
               
               <div>
-                <span className="text-xs font-semibold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-md">
-                  {product.categoryBn}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-md ${
+                    isPhysicalProduct ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
+                  }`}>
+                    {product.categoryBn}
+                  </span>
+                  <span className="text-[11px] font-semibold text-slate-500">
+                    {isPhysicalProduct ? 'পণ্য (অনলাইন/অফলাইন)' : 'সার্ভিস (ইন-পার্লার)'}
+                  </span>
+                </div>
 
                 <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mt-2 leading-snug">
                   {product.titleBn}
@@ -190,16 +263,37 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   </div>
                   <span className="text-slate-400">({product.reviewCount} রিভিউ)</span>
                   <span className="text-slate-300">•</span>
-                  <span className="text-emerald-700 font-medium">স্টকে উপলব্ধ</span>
+                  <span className="text-emerald-700 font-medium">
+                    {isPhysicalProduct ? `স্টক: ${product.stockCount}টি` : 'সিরিয়াল বুকিং সক্রিয়'}
+                  </span>
                 </div>
               </div>
+
+              {/* Delivery / In-person Location Notice Banner */}
+              {isPhysicalProduct ? (
+                <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-start gap-2.5 leading-relaxed">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">অনলাইন ও অফলাইনে বিক্রয়যোগ্য পণ্য:</span> এই পণ্যটি আপনি ঘরে বসে ক্যাশ অন হোম ডেলিভারিতে নিতে পারবেন অথবা তনু বিউটি পার্লারের আউটলেটে এসে সরাসরি দেখে কিনতে পারবেন।
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5 leading-relaxed">
+                  <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">সার্ভিস ডেলিভারি পলিসি:</span> প্রোডাক্ট ছাড়া বাকি সার্ভিসগুলো কোনো হোম ডেলিভারি হবে না। উন্নত জার্মান যন্ত্রপাতির সাহায্যে এই সার্ভিসটি গ্রহণ করতে সরাসরি আমাদের প্রতিষ্ঠানে (নাটিয়াপাড়া বাজার, দেলদুয়ার, টাঙ্গাইল) আসতে হবে।
+                  </div>
+                </div>
+              )}
 
               {/* Pricing */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-baseline justify-between">
                 <div>
-                  <span className="text-xs text-slate-500 block">মূল্য:</span>
+                  <span className="text-xs text-slate-500 block">
+                    {isPhysicalProduct ? 'পণ্যের মূল্য:' : 'সার্ভিস ফি:'}
+                  </span>
                   <div className="flex items-baseline gap-2 mt-0.5">
-                    <span className="text-2xl sm:text-3xl font-extrabold text-slate-900">
+                    <span className={`text-2xl sm:text-3xl font-extrabold ${isPhysicalProduct ? 'text-emerald-700' : 'text-slate-900'}`}>
                       ৳{product.price.toLocaleString('bn-BD')}
                     </span>
                     {product.originalPrice > product.price && (
@@ -217,7 +311,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 )}
               </div>
 
-              {/* Color Selection */}
+              {/* Options Selection if present */}
               {product.colors && product.colors.length > 0 && (
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700">অপশন নির্বাচন করুন:</label>
@@ -241,7 +335,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
               {/* Quantity */}
               <div className="flex items-center gap-3">
-                <span className="text-xs font-semibold text-slate-700">পরিমাণ:</span>
+                <span className="text-xs font-semibold text-slate-700">
+                  {isPhysicalProduct ? 'পরিমাণ:' : 'সেশন সংখ্যা:'}
+                </span>
                 <div className="flex items-center border border-slate-200 rounded-xl bg-white">
                   <button
                     onClick={handleDecreaseQty}
@@ -267,15 +363,29 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 </span>
               </div>
 
-              {/* Action Buttons */}
+              {/* Primary Action Buttons */}
               <div className="pt-2 flex flex-col sm:flex-row gap-3">
                 <button
                   id="direct-order-btn-fullpage"
                   disabled={product.stockCount <= 0}
-                  onClick={() => onDirectOrder(product, quantity, selectedColor, selectedSize)}
-                  className="flex-1 py-3 px-5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm transition-colors cursor-pointer shadow-xs"
+                  onClick={handlePrimaryAction}
+                  className={`flex-1 py-3 px-5 rounded-xl text-white font-bold text-sm transition-all cursor-pointer shadow-xs flex items-center justify-center gap-2 ${
+                    isPhysicalProduct
+                      ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800'
+                      : 'bg-rose-600 hover:bg-rose-700 active:bg-rose-800'
+                  }`}
                 >
-                  এখনই বুকিং / অর্ডার করুন
+                  {isPhysicalProduct ? (
+                    <>
+                      <ShoppingBag className="w-4 h-4" />
+                      <span>ক্যাশ অন ডেলিভারিতে অর্ডার করুন</span>
+                    </>
+                  ) : (
+                    <>
+                      <Calendar className="w-4 h-4" />
+                      <span>সিরিয়াল বুকিং দিন (প্রতিষ্ঠানে)</span>
+                    </>
+                  )}
                 </button>
 
                 <button
@@ -284,14 +394,17 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   onClick={() => onAddToCart(product, quantity, selectedColor, selectedSize)}
                   className="py-3 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-900 font-semibold text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <ShoppingCart className="w-4 h-4 text-rose-600" />
+                  <ShoppingCart className={`w-4 h-4 ${isPhysicalProduct ? 'text-emerald-700' : 'text-rose-600'}`} />
                   <span>কার্টে রাখুন</span>
                 </button>
               </div>
 
-              {/* Help & Helpline */}
+              {/* Direct Parlour Contact */}
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs text-slate-600">
-                <span>পরামর্শ বা সিরিয়ালের জন্য:</span>
+                <div className="flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                  <span>নাটিয়াপাড়া বাজার, দেলদুয়ার, টাঙ্গাইল</span>
+                </div>
                 <a href="tel:01302383795" className="font-bold text-rose-600 hover:underline flex items-center gap-1">
                   <PhoneCall className="w-3.5 h-3.5" />
                   <span>01302383795</span>
@@ -301,13 +414,17 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             </div>
           </div>
 
-          {/* Tabs */}
+          {/* Tabbed Detailed Information */}
           <div className="mt-10 pt-6 border-t border-slate-200">
             <div className="flex border-b border-slate-200 text-xs sm:text-sm font-semibold text-slate-500 gap-4 sm:gap-6">
               <button
                 onClick={() => setActiveTab('desc')}
                 className={`py-2.5 border-b-2 transition-colors cursor-pointer ${
-                  activeTab === 'desc' ? 'border-rose-600 text-rose-600 font-bold' : 'border-transparent hover:text-slate-900'
+                  activeTab === 'desc'
+                    ? isPhysicalProduct
+                      ? 'border-emerald-600 text-emerald-700 font-bold'
+                      : 'border-rose-600 text-rose-600 font-bold'
+                    : 'border-transparent hover:text-slate-900'
                 }`}
               >
                 বিস্তারিত বিবরণ
@@ -315,18 +432,26 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               <button
                 onClick={() => setActiveTab('specs')}
                 className={`py-2.5 border-b-2 transition-colors cursor-pointer ${
-                  activeTab === 'specs' ? 'border-rose-600 text-rose-600 font-bold' : 'border-transparent hover:text-slate-900'
+                  activeTab === 'specs'
+                    ? isPhysicalProduct
+                      ? 'border-emerald-600 text-emerald-700 font-bold'
+                      : 'border-rose-600 text-rose-600 font-bold'
+                    : 'border-transparent hover:text-slate-900'
                 }`}
               >
-                স্পেসিফিকেশন
+                স্পেসিফিকেশন ও তথ্য
               </button>
               <button
                 onClick={() => setActiveTab('delivery')}
                 className={`py-2.5 border-b-2 transition-colors cursor-pointer ${
-                  activeTab === 'delivery' ? 'border-rose-600 text-rose-600 font-bold' : 'border-transparent hover:text-slate-900'
+                  activeTab === 'delivery'
+                    ? isPhysicalProduct
+                      ? 'border-emerald-600 text-emerald-700 font-bold'
+                      : 'border-rose-600 text-rose-600 font-bold'
+                    : 'border-transparent hover:text-slate-900'
                 }`}
               >
-                ডেলিভারি ও গ্যারান্টি
+                {isPhysicalProduct ? 'ডেলিভারি ও নিশ্চয়তা' : 'সার্ভিস স্থান ও নিয়মাবলী'}
               </button>
             </div>
 
@@ -335,7 +460,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 <div className="space-y-4 max-w-3xl">
                   <p>{product.descriptionBn}</p>
                   <div className="space-y-2 pt-2">
-                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">সুবিধাসমূহ:</h4>
+                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">
+                      {isPhysicalProduct ? 'পণ্যের প্রধান সুবিধাসমূহ:' : 'সার্ভিসের প্রধান বৈশিষ্ট্যসমূহ:'}
+                    </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {product.keyFeaturesBn.map((feat, i) => (
                         <div key={i} className="flex items-center gap-2 text-xs text-slate-700 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
@@ -366,10 +493,31 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               )}
 
               {activeTab === 'delivery' && (
-                <div className="space-y-3 max-w-2xl text-xs text-slate-600">
-                  <p><b>ডেলিভারি সময়সূচি:</b> {product.deliveryDaysBn}</p>
-                  <p><b>রিটার্ন ও রিপ্লেসমেন্ট:</b> {product.warrantyBn || '৭ দিনের সহজ রিপ্লেসমেন্ট গ্যারান্টি'}</p>
-                  <p className="text-slate-500">পণ্য হাতে পেয়ে পুরোপুরি যাচাই করে মূল্য পরিশোধ করুন।</p>
+                <div className="space-y-3 max-w-2xl text-xs text-slate-700">
+                  {isPhysicalProduct ? (
+                    <>
+                      <p><b>ডেলিভারি মাধ্যম:</b> {product.deliveryDaysBn || 'সারাদেশে ২-৩ দিনে ক্যাশ অন হোম ডেলিভারি'}</p>
+                      <p><b>পিকআপ সুবিধা:</b> পার্লারের শোরুম থেকে সরাসরি এসে নেওয়ার সুবিধাও রয়েছে।</p>
+                      <p><b>কোয়ালিটি গ্যারান্টি:</b> {product.warrantyBn || '১০০% অরিজিনাল অথেনটিক প্রোডাক্ট গ্যারান্টি'}</p>
+                      <p className="text-emerald-800 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100">
+                        {product.deliveryNoticeBn || 'পণ্য হাতে পেয়ে পুরোপুরি যাচাই করে মূল্য পরিশোধ করতে পারবেন।'}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 space-y-1">
+                        <p className="font-bold flex items-center gap-1.5 text-amber-950">
+                          <Building2 className="w-4 h-4 text-amber-700" />
+                          <span>হোম ডেলিভারি প্রযোজ্য নয়:</span>
+                        </p>
+                        <p>
+                          প্রোডাক্ট ছাড়া বাকি কোনো সার্ভিস হোম ডেলিভারি করা হয় না। জার্মানি প্রযুক্তির লেজার ইকুইপমেন্ট ও প্রফেশনাল স্পেশালিস্ট দ্বারা পরিচালিত সেবা নিতে প্রতিষ্ঠানে উপস্থিত হতে হবে।
+                        </p>
+                      </div>
+                      <p><b>শাখার ঠিকানা:</b> ডুবাইল, সেহড়াতৈল রোড, নাটিয়াপাড়া বাজার, দেলদুয়ার, টাঙ্গাইল</p>
+                      <p><b>অ্যাপয়েন্টমেন্ট বা সিরিয়াল:</b> অনলাইনে সিরিয়াল দিন অথবা সরাসরি কল করুন <b>01302383795</b> নম্বরে।</p>
+                    </>
+                  )}
                 </div>
               )}
             </div>

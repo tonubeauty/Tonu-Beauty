@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PRODUCTS, CATEGORIES } from './data/products';
 import { Product, CartItem, DeliveryZone, Order } from './types';
-import { getProductsFromFirestore, subscribeToProducts } from './lib/firebase';
+import { getProductsFromFirestore, subscribeToProducts, saveProductsToFirestore } from './lib/firebase';
 import { initSmoothScroll, scrollToTarget, pauseScroll, resumeScroll, resizeScroll } from './lib/smoothScroll';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
@@ -92,6 +92,11 @@ export default function App() {
         if (fsProducts && fsProducts.length > 0) {
           setProducts(fsProducts);
           localStorage.setItem('tanu_products', JSON.stringify(fsProducts));
+        } else {
+          // If Firestore is empty, seed it with default catalog so user can immediately edit & manage
+          await saveProductsToFirestore(PRODUCTS);
+          setProducts(PRODUCTS);
+          localStorage.setItem('tanu_products', JSON.stringify(PRODUCTS));
         }
       } catch (err) {
         console.error('Failed to load products from Firestore:', err);
@@ -438,15 +443,22 @@ export default function App() {
 
             {/* Tanu Beauty Parlour & Laser Center Featured Section */}
             <TanuBeautySection
+              products={products}
               onBookAppointment={(serviceName) => {
                 setAppointmentService(serviceName || '');
                 pushModalHistory('appointment');
                 setIsAppointmentModalOpen(true);
               }}
-              onExploreBeautyProducts={() => {
+              onExploreBeautyProducts={(catId) => {
                 pushModalHistory('category');
-                setSelectedCategory('csa_laser');
+                setSelectedCategory(catId || 'beauty_products');
                 scrollToCatalog();
+              }}
+              onAddToCart={handleAddToCart}
+              onDirectOrder={handleDirectOrder}
+              onQuickView={(p) => {
+                pushModalHistory('quickView');
+                setQuickViewProduct(p);
               }}
             />
 

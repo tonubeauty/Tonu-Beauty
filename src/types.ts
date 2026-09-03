@@ -4,6 +4,7 @@ export interface Product {
   titleBn: string;
   category: string;
   categoryBn: string;
+  itemType?: 'product' | 'service'; // 'product' = পণ্য (অনলাইন ও অফলাইনে বিক্রি ও ডেলিভারি), 'service' = সার্ভিস (ডেলিভারি হবে না, প্রতিষ্ঠানে এসে নিতে হবে)
   price: number; // Price in BDT
   originalPrice: number; // Original price before discount
   discountPercent: number;
@@ -22,6 +23,7 @@ export interface Product {
   sizes?: string[];
   warrantyBn?: string;
   deliveryDaysBn?: string;
+  deliveryNoticeBn?: string;
 }
 
 export interface CartItem {
