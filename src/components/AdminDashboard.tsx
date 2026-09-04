@@ -14,6 +14,7 @@ import {
 } from '../lib/firebase';
 import { A4PrintInvoice } from './A4PrintInvoice';
 import { ServiceManagerModal } from './ServiceManagerModal';
+import { AppointmentManager } from './AppointmentManager';
 import { isProductItem } from '../data/products';
 import { resizeScroll, resumeScroll } from '../lib/smoothScroll';
 import {
@@ -81,8 +82,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // Active Navigation Tabs: 'overview' | 'orders' | 'billing' | 'statements' | 'services' | 'settings'
-  const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'billing' | 'statements' | 'services' | 'settings'>('overview');
+  // Active Navigation Tabs: 'overview' | 'orders' | 'appointments' | 'billing' | 'statements' | 'services' | 'settings'
+  const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'appointments' | 'billing' | 'statements' | 'services' | 'settings'>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab') || urlParams.get('view');
+      const adminParam = urlParams.get('admin');
+      if (tabParam === 'appointments' || adminParam === 'appointments' || tabParam === 'appointment') {
+        return 'appointments';
+      }
+    } catch {}
+    return 'overview';
+  });
 
   // Orders State (synced from Firestore)
   const [orders, setOrders] = useState<Order[]>([]);
@@ -769,13 +780,148 @@ function cleanStr(str: string): string {
         </div>
       </header>
 
-      {/* Main Admin Sub-Navigation Tabs */}
-      <div className="bg-white border-b border-slate-200 px-3 sm:px-6 sticky top-12 sm:top-14 z-20 overflow-x-auto no-scrollbar shadow-2xs">
-        <div className="max-w-7xl mx-auto flex items-center gap-1 sm:gap-2 min-w-max">
+      {/* Main Admin Sub-Navigation: Responsive 4-Column Icon Grid on Mobile, Sleek Horizontal Tabs on Desktop */}
+      <div className="bg-white border-b border-slate-200 sticky top-12 sm:top-14 z-20 shadow-2xs">
+        
+        {/* MOBILE & MINI-TABLET: 4-COLUMN ICON GRID (সহজে বুঝার জন্য প্রতি সারিতে ৪ টি করে আইকন গ্রিড) */}
+        <div className="md:hidden px-2 py-2 bg-slate-50/70 border-b border-slate-100">
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+            
+            {/* 1. ড্যাশবোর্ড */}
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all cursor-pointer relative text-center select-none ${
+                activeTab === 'overview'
+                  ? 'bg-rose-600 text-white shadow-xs ring-2 ring-rose-500/30'
+                  : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200/80 shadow-2xs'
+              }`}
+            >
+              <LayoutDashboard className={`w-4 h-4 sm:w-5 sm:h-5 mb-1 ${activeTab === 'overview' ? 'text-white' : 'text-slate-700'}`} />
+              <span className={`text-[10.5px] sm:text-xs leading-tight font-bold ${activeTab === 'overview' ? 'text-white' : 'text-slate-800'}`}>
+                ড্যাশবোর্ড
+              </span>
+            </button>
+
+            {/* 2. বুকিং ও অর্ডার */}
+            <button
+              onClick={() => setActiveTab('orders')}
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all cursor-pointer relative text-center select-none ${
+                activeTab === 'orders'
+                  ? 'bg-rose-600 text-white shadow-xs ring-2 ring-rose-500/30'
+                  : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200/80 shadow-2xs'
+              }`}
+            >
+              <div className="relative mb-1">
+                <ClipboardList className={`w-4 h-4 sm:w-5 sm:h-5 ${activeTab === 'orders' ? 'text-white' : 'text-amber-600'}`} />
+                {orders.length > 0 && (
+                  <span className={`absolute -top-1.5 -right-2 px-1 py-0.2 rounded-full text-[9px] font-black leading-none ${
+                    activeTab === 'orders' ? 'bg-white text-rose-600' : 'bg-rose-600 text-white'
+                  }`}>
+                    {orders.length}
+                  </span>
+                )}
+              </div>
+              <span className={`text-[10px] sm:text-xs leading-tight font-bold ${activeTab === 'orders' ? 'text-white' : 'text-slate-800'}`}>
+                বুকিং ও অর্ডার {orders.length > 0 ? `(${orders.length})` : ''}
+              </span>
+            </button>
+
+            {/* 3. অ্যাপয়েন্টমেন্ট এন্ট্রি ও ড্যাশবোর্ড */}
+            <button
+              onClick={() => setActiveTab('appointments')}
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all cursor-pointer relative text-center select-none ${
+                activeTab === 'appointments'
+                  ? 'bg-rose-600 text-white shadow-xs ring-2 ring-rose-500/30'
+                  : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200/80 shadow-2xs'
+              }`}
+            >
+              <Calendar className={`w-4 h-4 sm:w-5 sm:h-5 mb-1 ${activeTab === 'appointments' ? 'text-white' : 'text-rose-600'}`} />
+              <span className={`text-[10px] sm:text-xs leading-tight font-bold ${activeTab === 'appointments' ? 'text-white' : 'text-rose-700'}`}>
+                অ্যাপয়েন্টমেন্ট
+              </span>
+            </button>
+
+            {/* 4. নতুন বিলিং ও POS */}
+            <button
+              onClick={() => setActiveTab('billing')}
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all cursor-pointer relative text-center select-none ${
+                activeTab === 'billing'
+                  ? 'bg-rose-600 text-white shadow-xs ring-2 ring-rose-500/30'
+                  : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200/80 shadow-2xs'
+              }`}
+            >
+              <Receipt className={`w-4 h-4 sm:w-5 sm:h-5 mb-1 ${activeTab === 'billing' ? 'text-white' : 'text-emerald-600'}`} />
+              <span className={`text-[10.5px] sm:text-xs leading-tight font-bold ${activeTab === 'billing' ? 'text-white' : 'text-emerald-800'}`}>
+                বিলিং ও POS
+              </span>
+            </button>
+
+            {/* 5. কাস্টমার হিস্ট্রি */}
+            <button
+              onClick={() => setActiveTab('statements')}
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all cursor-pointer relative text-center select-none ${
+                activeTab === 'statements'
+                  ? 'bg-rose-600 text-white shadow-xs ring-2 ring-rose-500/30'
+                  : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200/80 shadow-2xs'
+              }`}
+            >
+              <Users className={`w-4 h-4 sm:w-5 sm:h-5 mb-1 ${activeTab === 'statements' ? 'text-white' : 'text-blue-600'}`} />
+              <span className={`text-[10.5px] sm:text-xs leading-tight font-bold ${activeTab === 'statements' ? 'text-white' : 'text-slate-800'}`}>
+                কাস্টমার হিস্ট্রি
+              </span>
+            </button>
+
+            {/* 6. সার্ভিস ও স্টক */}
+            <button
+              onClick={() => setActiveTab('services')}
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all cursor-pointer relative text-center select-none ${
+                activeTab === 'services'
+                  ? 'bg-rose-600 text-white shadow-xs ring-2 ring-rose-500/30'
+                  : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200/80 shadow-2xs'
+              }`}
+            >
+              <Sparkles className={`w-4 h-4 sm:w-5 sm:h-5 mb-1 ${activeTab === 'services' ? 'text-white' : 'text-purple-600'}`} />
+              <span className={`text-[10.5px] sm:text-xs leading-tight font-bold ${activeTab === 'services' ? 'text-white' : 'text-slate-800'}`}>
+                সার্ভিস ও স্টক
+              </span>
+            </button>
+
+            {/* 7. পার্লার সেটিংস */}
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all cursor-pointer relative text-center select-none ${
+                activeTab === 'settings'
+                  ? 'bg-rose-600 text-white shadow-xs ring-2 ring-rose-500/30'
+                  : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200/80 shadow-2xs'
+              }`}
+            >
+              <Settings className={`w-4 h-4 sm:w-5 sm:h-5 mb-1 ${activeTab === 'settings' ? 'text-white' : 'text-slate-600'}`} />
+              <span className={`text-[10.5px] sm:text-xs leading-tight font-bold ${activeTab === 'settings' ? 'text-white' : 'text-slate-800'}`}>
+                পার্লার সেটিংস
+              </span>
+            </button>
+
+            {/* 8. ওয়েবসাইট দেখুন (গ্রিড ব্যালান্স ও দ্রুত ভিজিট) */}
+            <button
+              onClick={onBackToWebsite}
+              className="flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all cursor-pointer relative text-center select-none bg-white hover:bg-slate-100 text-slate-700 border border-slate-200/80 shadow-2xs"
+              title="ওয়েবসাইটে ফিরে যান"
+            >
+              <Globe className="w-4 h-4 sm:w-5 sm:h-5 mb-1 text-teal-600" />
+              <span className="text-[10.5px] sm:text-xs leading-tight font-bold text-slate-800">
+                ওয়েবসাইট
+              </span>
+            </button>
+
+          </div>
+        </div>
+
+        {/* DESKTOP / LARGE TABLET VIEW: HORIZONTAL TABS */}
+        <div className="hidden md:flex max-w-7xl mx-auto px-4 sm:px-6 items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar">
           
           <button
             onClick={() => setActiveTab('overview')}
-            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+            className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'overview'
                 ? 'border-rose-600 text-rose-600 bg-rose-50/50'
                 : 'border-transparent text-slate-600 hover:text-slate-900'
@@ -787,19 +933,31 @@ function cleanStr(str: string): string {
 
           <button
             onClick={() => setActiveTab('orders')}
-            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+            className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'orders'
                 ? 'border-rose-600 text-rose-600 bg-rose-50/50'
                 : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
-            <ClipboardList className="w-4 h-4" />
+            <ClipboardList className="w-4 h-4 text-amber-600" />
             <span>বুকিং ও অর্ডার ({orders.length})</span>
           </button>
 
           <button
+            onClick={() => setActiveTab('appointments')}
+            className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+              activeTab === 'appointments'
+                ? 'border-rose-600 text-rose-600 bg-rose-50/50'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Calendar className="w-4 h-4 text-rose-600" />
+            <span className="font-extrabold text-rose-700">অ্যাপয়েন্টমেন্ট এন্ট্রি ও ড্যাশবোর্ড</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('billing')}
-            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+            className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'billing'
                 ? 'border-rose-600 text-rose-600 bg-rose-50/50'
                 : 'border-transparent text-slate-600 hover:text-slate-900'
@@ -811,7 +969,7 @@ function cleanStr(str: string): string {
 
           <button
             onClick={() => setActiveTab('statements')}
-            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+            className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'statements'
                 ? 'border-rose-600 text-rose-600 bg-rose-50/50'
                 : 'border-transparent text-slate-600 hover:text-slate-900'
@@ -823,19 +981,19 @@ function cleanStr(str: string): string {
 
           <button
             onClick={() => setActiveTab('services')}
-            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+            className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'services'
                 ? 'border-rose-600 text-rose-600 bg-rose-50/50'
                 : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Sparkles className="w-4 h-4" />
+            <Sparkles className="w-4 h-4 text-purple-600" />
             <span>সার্ভিস ও স্টক</span>
           </button>
 
           <button
             onClick={() => setActiveTab('settings')}
-            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+            className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'settings'
                 ? 'border-rose-600 text-rose-600 bg-rose-50/50'
                 : 'border-transparent text-slate-600 hover:text-slate-900'
@@ -1212,6 +1370,21 @@ function cleanStr(str: string): string {
             </div>
 
           </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB: APPOINTMENT ENTRY & DASHBOARD */}
+        {/* ========================================================================= */}
+        {activeTab === 'appointments' && (
+          <AppointmentManager
+            onToast={onToast}
+            onOpenManualBilling={(customerData) => {
+              setBillCustomerName(customerData.name);
+              setBillCustomerPhone(customerData.phone);
+              setBillNotes(`অ্যাপয়েন্টমেন্ট সেবা: ${customerData.service}`);
+              setActiveTab('billing');
+            }}
+          />
         )}
 
         {/* ========================================================================= */}

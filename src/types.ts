@@ -113,3 +113,30 @@ export interface Review {
   comment: string;
   verifiedPurchase: boolean;
 }
+
+export type AppointmentStatus = 'pending' | 'received' | 'not_attended' | 'contacted' | 'cancelled';
+
+export interface Appointment {
+  id: string;
+  name: string; // নাম
+  address: string; // ঠিকানা
+  phone: string; // ফোন নম্বর
+  service: string; // সেবা
+  date: string; // YYYY-MM-DD
+  dateDisplay: string; // দিন/মাস ও বছর (e.g. 05/09/2026)
+  time?: string; // সময় (যেমন: ১১:০০ AM)
+  status: AppointmentStatus; // স্ট্যাটাস: অপেক্ষমান / রিসিভড / আসলো না / যোগাযোগ সম্পন্ন / বাতিল
+  notes?: string; // অতিরিক্ত বিবরণ
+  createdAt: string;
+  updatedAt?: string;
+  receivedAt?: string; // রিসিভ করার সময়
+  lastContactedAt?: string; // যোগাযোগের সময়
+  contactNotes?: string; // যোগাযোগের বিবরণ বা প্রতিক্রিয়া
+}
+
+export interface AppointmentServiceCategory {
+  id: string;
+  name: string; // সার্ভিসের নাম (যা পরবর্তীতে ক্যাটাগরি হিসেবে সংরক্ষিত থাকবে)
+  count?: number;
+  createdAt?: string;
+}

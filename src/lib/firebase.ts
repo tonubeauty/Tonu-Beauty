@@ -13,7 +13,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { Order, Product } from '../types';
+import { Order, Product, Appointment, AppointmentStatus, AppointmentServiceCategory } from '../types';
 
 // Safely initialize Firebase App
 let app: any = null;
@@ -308,6 +308,204 @@ export function subscribeToAppSettings(onUpdate: (settings: AppSettings) => void
   } catch (err) {
     console.error('Error setting up app settings listener:', err);
     return () => {};
+  }
+}
+
+// =========================================================================
+// APPOINTMENTS & SERVICES CATALOG MANAGEMENT
+// =========================================================================
+
+const APPOINTMENTS_COLLECTION = 'appointments';
+const APPOINTMENT_SERVICES_COLLECTION = 'appointment_services';
+
+// Save or update an appointment
+export async function saveAppointmentToFirestore(appointment: Appointment): Promise<boolean> {
+  try {
+    if (!db) return false;
+    const docRef = doc(db, APPOINTMENTS_COLLECTION, appointment.id);
+    const sanitized = cleanForFirestore({
+      ...appointment,
+      updatedAt: new Date().toISOString(),
+    });
+    await setDoc(docRef, sanitized, { merge: true });
+    return true;
+  } catch (err) {
+    console.error('Error saving appointment to Firestore:', err);
+    return false;
+  }
+}
+
+// Fetch all appointments from Firestore
+export async function getAppointmentsFromFirestore(): Promise<Appointment[]> {
+  try {
+    if (!db) return [];
+    const q = query(collection(db, APPOINTMENTS_COLLECTION));
+    const snapshot = await getDocs(q);
+    const appointments: Appointment[] = [];
+    snapshot.forEach((docSnap) => {
+      appointments.push(docSnap.data() as Appointment);
+    });
+    // Sort by appointment date / createdAt descending
+    return appointments.sort((a, b) => {
+      const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  } catch (err) {
+    console.error('Error fetching appointments from Firestore:', err);
+    return [];
+  }
+}
+
+// Real-time listener for appointments
+export function subscribeToAppointments(onUpdate: (appointments: Appointment[]) => void) {
+  try {
+    if (!db) return () => {};
+    const q = query(collection(db, APPOINTMENTS_COLLECTION));
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const appointments: Appointment[] = [];
+        snapshot.forEach((docSnap) => {
+          appointments.push(docSnap.data() as Appointment);
+        });
+        appointments.sort((a, b) => {
+          const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+          if (dateDiff !== 0) return dateDiff;
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
+        onUpdate(appointments);
+      },
+      (error) => {
+        console.error('Firestore appointments snapshot error:', error);
+      }
+    );
+  } catch (err) {
+    console.error('Error subscribing to appointments:', err);
+    return () => {};
+  }
+}
+
+// Update status of an appointment (e.g. received, not_attended, contacted)
+export async function updateAppointmentStatusInFirestore(
+  appointmentId: string,
+  status: AppointmentStatus,
+  extraData?: Partial<Appointment>
+): Promise<boolean> {
+  try {
+    if (!db) return false;
+    const docRef = doc(db, APPOINTMENTS_COLLECTION, appointmentId);
+    const updates: any = {
+      status,
+      updatedAt: new Date().toISOString(),
+      ...(extraData || {}),
+    };
+    if (status === 'received') {
+      updates.receivedAt = new Date().toISOString();
+    } else if (status === 'contacted') {
+      updates.lastContactedAt = new Date().toISOString();
+    }
+    await updateDoc(docRef, cleanForFirestore(updates));
+    return true;
+  } catch (err) {
+    console.error('Error updating appointment status in Firestore:', err);
+    return false;
+  }
+}
+
+// Delete an appointment
+export async function deleteAppointmentFromFirestore(appointmentId: string): Promise<boolean> {
+  try {
+    if (!db) return false;
+    const docRef = doc(db, APPOINTMENTS_COLLECTION, appointmentId);
+    await deleteDoc(docRef);
+    return true;
+  } catch (err) {
+    console.error('Error deleting appointment from Firestore:', err);
+    return false;
+  }
+}
+
+// Save or remember a service name into the catalog
+export async function saveAppointmentServiceCategory(serviceName: string): Promise<boolean> {
+  const trimmed = serviceName.trim();
+  if (!trimmed) return false;
+  try {
+    if (!db) return false;
+    // Normalized ID
+    const docId = trimmed.toLowerCase().replace(/[\s\-_#,:;./\\]+/g, '-');
+    const docRef = doc(db, APPOINTMENT_SERVICES_COLLECTION, docId);
+    const existing = await getDoc(docRef);
+    if (existing.exists()) {
+      const data = existing.data();
+      await updateDoc(docRef, { count: (data?.count || 1) + 1 });
+    } else {
+      await setDoc(docRef, {
+        id: docId,
+        name: trimmed,
+        count: 1,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    return true;
+  } catch (err) {
+    console.error('Error saving appointment service category:', err);
+    return false;
+  }
+}
+
+// Fetch all saved service categories
+export async function getAppointmentServiceCategories(): Promise<AppointmentServiceCategory[]> {
+  try {
+    if (!db) return [];
+    const q = query(collection(db, APPOINTMENT_SERVICES_COLLECTION));
+    const snapshot = await getDocs(q);
+    const list: AppointmentServiceCategory[] = [];
+    snapshot.forEach((docSnap) => {
+      list.push(docSnap.data() as AppointmentServiceCategory);
+    });
+    return list.sort((a, b) => (b.count || 0) - (a.count || 0));
+  } catch (err) {
+    console.error('Error fetching appointment service categories:', err);
+    return [];
+  }
+}
+
+// Real-time listener for saved service categories
+export function subscribeToAppointmentServices(onUpdate: (services: AppointmentServiceCategory[]) => void) {
+  try {
+    if (!db) return () => {};
+    const q = query(collection(db, APPOINTMENT_SERVICES_COLLECTION));
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const list: AppointmentServiceCategory[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push(docSnap.data() as AppointmentServiceCategory);
+        });
+        list.sort((a, b) => (b.count || 0) - (a.count || 0));
+        onUpdate(list);
+      },
+      (err) => {
+        console.error('Firestore appointment services snapshot error:', err);
+      }
+    );
+  } catch (err) {
+    console.error('Error subscribing to appointment services:', err);
+    return () => {};
+  }
+}
+
+// Delete a service category from catalog
+export async function deleteAppointmentServiceCategory(docId: string): Promise<boolean> {
+  try {
+    if (!db) return false;
+    const docRef = doc(db, APPOINTMENT_SERVICES_COLLECTION, docId);
+    await deleteDoc(docRef);
+    return true;
+  } catch (err) {
+    console.error('Error deleting appointment service category:', err);
+    return false;
   }
 }
 

@@ -18,7 +18,8 @@ import { TanuBeautySection } from './components/TanuBeautySection';
 import { BeautyAppointmentModal } from './components/BeautyAppointmentModal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { IsolatedReceiptView } from './components/IsolatedReceiptView';
-import { Check, ShoppingBag, ShieldCheck, Truck } from 'lucide-react';
+import { AppointmentManager } from './components/AppointmentManager';
+import { Check, ShoppingBag, ShieldCheck, Truck, ArrowLeft } from 'lucide-react';
 
 export default function App() {
   const [receiptOrderId, setReceiptOrderId] = useState<string>(() => {
@@ -30,12 +31,15 @@ export default function App() {
     }
   });
 
-  // Navigation View State: 'website' | 'admin' | 'receipt'
-  const [currentView, setCurrentView] = useState<'website' | 'admin' | 'receipt'>(() => {
+  // Navigation View State: 'website' | 'admin' | 'receipt' | 'appointments'
+  const [currentView, setCurrentView] = useState<'website' | 'admin' | 'receipt' | 'appointments'>(() => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('receipt') || urlParams.get('voucher') || urlParams.get('memo')) {
         return 'receipt';
+      }
+      if (urlParams.get('admin') === 'appointments' || urlParams.get('view') === 'appointments') {
+        return 'appointments';
       }
       if (urlParams.get('admin') === 'true' || urlParams.get('admin') === '1') {
         return 'admin';
@@ -246,7 +250,9 @@ export default function App() {
         const trackId = urlParams.get('track') || urlParams.get('order');
         const adminParam = urlParams.get('admin');
 
-        if (adminParam === 'true' || adminParam === '1') {
+        if (adminParam === 'appointments' || urlParams.get('view') === 'appointments') {
+          setCurrentView('appointments');
+        } else if (adminParam === 'true' || adminParam === '1') {
           setCurrentView('admin');
         }
 
@@ -387,6 +393,48 @@ export default function App() {
 
   if (currentView === 'receipt' && receiptOrderId) {
     return <IsolatedReceiptView orderId={receiptOrderId} />;
+  }
+
+  if (currentView === 'appointments') {
+    return (
+      <div className="min-h-screen bg-slate-100 p-3 sm:p-6 lg:p-8 font-['Anek_Bangla',sans-serif]">
+        <div className="max-w-7xl mx-auto space-y-4">
+          <div className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-xs">
+            <button
+              onClick={() => {
+                setCurrentView('admin');
+                window.history.replaceState({ root: true, view: 'admin' }, '');
+              }}
+              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>এডমিন প্যানেলে ফিরুন</span>
+            </button>
+            <div className="text-center hidden sm:block">
+              <span className="text-xs font-extrabold text-slate-800">তনু বিউটি পার্লার ও লেজার</span>
+              <span className="text-[11px] text-rose-600 block font-semibold">ক্লিন অ্যাপয়েন্টমেন্ট পোর্টাল</span>
+            </div>
+            <button
+              onClick={() => {
+                setCurrentView('website');
+                window.history.replaceState({ root: true, view: 'website' }, '');
+              }}
+              className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors cursor-pointer"
+            >
+              ওয়েবসাইট
+            </button>
+          </div>
+          <AppointmentManager
+            onToast={showToast}
+            isStandalonePage={true}
+            onCloseStandalone={() => {
+              setCurrentView('admin');
+              window.history.replaceState({ root: true, view: 'admin' }, '');
+            }}
+          />
+        </div>
+      </div>
+    );
   }
 
   if (currentView === 'admin') {

@@ -32,6 +32,30 @@
         "qrTextMemoEnabled": { "type": "boolean" },
         "updatedAt": { "type": "string" }
       }
+    },
+    "appointments": {
+      "title": "Appointments",
+      "description": "Customer parlour appointments, tracking received status, and follow-up communication",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "service": { "type": "string" },
+        "date": { "type": "string" },
+        "dateDisplay": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "appointment_services": {
+      "title": "Appointment Services Catalog",
+      "description": "Saved parlour services remembered as categories for one-click re-selection",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "count": { "type": "number" }
+      }
     }
   }
 }
