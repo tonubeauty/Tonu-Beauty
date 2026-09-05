@@ -38,7 +38,8 @@ import {
   Minimize2,
   Tag,
   Send,
-  CalendarDays
+  CalendarDays,
+  UserCheck,
 } from 'lucide-react';
 import { printElementViaAboutBlank } from '../lib/printHelper';
 
@@ -116,6 +117,9 @@ export const AppointmentManager: React.FC<AppointmentManagerProps> = ({
   // Contact Notes Modal
   const [contactingAppt, setContactingAppt] = useState<Appointment | null>(null);
   const [contactNoteText, setContactNoteText] = useState('');
+
+  // Receive Confirmation Popup Modal
+  const [confirmReceivingAppt, setConfirmReceivingAppt] = useState<Appointment | null>(null);
 
   // Fullscreen / Clean view toggle
   const [isFullscreenClean, setIsFullscreenClean] = useState(isStandalonePage);
@@ -1211,7 +1215,7 @@ export const AppointmentManager: React.FC<AppointmentManagerProps> = ({
                         {!isReceived ? (
                           <button
                             type="button"
-                            onClick={() => handleMarkReceived(apt)}
+                            onClick={() => setConfirmReceivingAppt(apt)}
                             className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
@@ -1298,16 +1302,6 @@ export const AppointmentManager: React.FC<AppointmentManagerProps> = ({
                           <span className="hidden sm:inline">নোট</span>
                         </button>
 
-                        {/* Delete Button */}
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteAppointment(apt.id, apt.name)}
-                          className="p-1.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                          title="অ্যাপয়েন্টমেন্ট মুছুন"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-
                       </div>
 
                     </div>
@@ -1376,6 +1370,111 @@ export const AppointmentManager: React.FC<AppointmentManagerProps> = ({
               >
                 সংরক্ষণ ও যোগাযোগ সম্পন্ন
               </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 4. RECEIVE CONFIRMATION POPUP MODAL (কাস্টমার উপস্থিতি নিশ্চিতকরণ) */}
+      {/* ========================================================================= */}
+      {confirmReceivingAppt && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl border border-slate-200 p-5 sm:p-6 space-y-4 font-['Anek_Bangla',sans-serif] animate-in fade-in zoom-in-95 duration-150">
+            
+            {/* Header with Icon */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shadow-2xs shrink-0">
+                  <UserCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="text-base font-extrabold text-slate-900 leading-tight">
+                    উপস্থিতি যাচাই ও রিসিভ
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    তনু বিউটি পার্লার ও লেজার
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setConfirmReceivingAppt(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Requested Prominent Message Banner */}
+            <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-4 text-slate-800 text-xs sm:text-sm leading-relaxed font-semibold text-center shadow-2xs">
+              “উনি কি পার্লারে এসেছেন? যদি আসে তবে রিসিভ করুন নয়তো রিসিভ করবেন না আর বুকিং করা তারিখে না আসলে দিন শেষে আসলো না এটায় ক্লিক করতে পারেন।”
+            </div>
+
+            {/* Appointment Details Card */}
+            <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">কাস্টমারের নাম:</span>
+                <span className="font-extrabold text-slate-900 text-sm">{confirmReceivingAppt.name}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">মোবাইল নম্বর:</span>
+                <span className="font-bold text-slate-800 font-['Plus_Jakarta_Sans',sans-serif]">{confirmReceivingAppt.phone}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">সেবা / ট্রিটমেন্ট:</span>
+                <span className="font-bold text-rose-600">{confirmReceivingAppt.service}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">বুকিং তারিখ ও সময়:</span>
+                <span className="font-bold text-slate-700 font-['Plus_Jakarta_Sans',sans-serif]">
+                  {confirmReceivingAppt.dateDisplay} {confirmReceivingAppt.time ? `(${confirmReceivingAppt.time})` : ''}
+                </span>
+              </div>
+              {confirmReceivingAppt.address && (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-medium">ঠিকানা:</span>
+                  <span className="text-slate-700 truncate max-w-[200px]">{confirmReceivingAppt.address}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const target = confirmReceivingAppt;
+                  setConfirmReceivingAppt(null);
+                  handleMarkReceived(target);
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>হ্যাঁ, উনি এসেছেন — রিসিভ করুন</span>
+              </button>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = confirmReceivingAppt;
+                    setConfirmReceivingAppt(null);
+                    handleMarkNotAttended(target);
+                  }}
+                  className="py-2 px-3 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>আসলো না</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmReceivingAppt(null)}
+                  className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <span>বাতিল / অপেক্ষা করুন</span>
+                </button>
+              </div>
             </div>
 
           </div>
